@@ -63,7 +63,7 @@ collections must not overlap roles; unsigned key_class never selects a profile.
 | Operator device key | Published P-256 low-S act/approval and permitted delegated-grant profiles | Owner's device; qualified local signer/presence path only | Operator-root re-attestation and signed revocation; recovery remains separately gated | Device acts/delegated grants within current authority; no implicit A3, root or recovery powers |
 | Registry-owner root | Registry-scoped `revocation/1` and checkpoints; future freshness/1 only after S4, with agent scope pinned to the exact purpose-5 root | Online restricted signer on trust node, or external option in Q3; registry-built reviewed profiles only | Owner-approved protected pin transition, continuity preserved; new profiles/recovery require review | False scoped revocations/checkpoints, future freshness and withholding, not other roots' signatures |
 | Offline enrollment publisher | E1 Ed25519 `enrollment/1` only | Offline with the owner; explicit publisher operation, never service access | R's full-history re-sign and atomic pin advance; bodies/ids/tombstones retained | Forged enrollment envelopes; maintainer review and operator commit pin remain separate barriers |
-| Registry maintainer | Git commits for R's allowlist | Proposed separate online signer on trust node; export writer may request signatures, operator alone approves deployment pins | Owner changes allowlist and exact approved revision without resetting history | Forged commit signatures, not E1 content or deployment approval |
+| Registry maintainer | Git commits for R's allowlist | Separate online signer on trust node (Q6); export writer may request signatures, operator alone approves deployment pins | Owner changes allowlist and exact approved revision without resetting history | Forged commit signatures, not E1 content or deployment approval |
 | Witness service | Its own receipt/head profiles | Separate online witness account/process on trust node; witness daemon only | Explicit owner-provisioned key epochs, old continuity and off-node checkpoints retained | False heads/receipts within its scope; co-location leaves full-node compromise shared |
 | Witness consumer/bridge principal | Only its reviewed stream authentication/record profile, never content | Separate protected witness-side account; no credential available to registry writer | Owner rebinds credentials without stream reset; exact-candidate recovery gates persist | That consumer stream's claims, not other consumers' streams or content roots |
 | Off-node checkpoint custodian | WS independently authenticated checkpoint confirmations/fresh reads; exact provider profile gated | Separate off-node administration, never registry/witness account access | Explicit owner-approved continuity-preserving policy; no reset from host backup | False latestness/rollback claims within its retained coverage; combined loss with all surviving evidence is outside the guarantee |
@@ -78,7 +78,8 @@ derivation is implied. The online signing component lives in the registry accoun
 node, or in an explicitly chosen external custody provider. It accepts only locally constructed reviewed
 profiles, not arbitrary preimages. No registry access to message/SSH signing is needed.
 
-The owner chooses protection (Q3): a protected software file is simple but exposes the key to
+Registry-owner key custody is awaiting owner (Q3); the recommended baseline is an isolated closed-profile signer.
+The owner chooses protection: a protected software file is simple but exposes the key to
 service-memory compromise; a separate signer process/account with a closed signing API narrows accidental
 exposure but not full-node compromise; hardware or an independently administered remote signer can
 prevent extraction but adds latency, availability and authorization-policy dependencies. An offline key cannot autonomously sustain freshness publications.
@@ -105,6 +106,7 @@ off-node checkpoint detects rollback only within its retained coverage.
 Propose a bounded authenticated submission operation, not a finalized HTTP schema: `Accept(expected_head,
 request_id, record_type, exact_record_bytes, evidence)`. Protected configuration maps mutually
 authenticated TLS client certificates to owner-controlled publisher identities and allowed types/scopes.
+Administration uses a restricted local socket (Q4, decided 2026-10-24, content review).
 Provisioning and rotation are explicit; no self-enrollment or bearer secret in URLs. An authorized
 channel may carry only content its original signer can authorize. Read principals have separate ACLs;
 public distribution requires an explicit metadata decision. Record types, key classes and signing
@@ -169,7 +171,8 @@ requires a covering parent addressed to the service with depth >=1 and all
 narrowing/time checks. Attestation grants no parent or self-root authority;
 agents remain forbidden issuers. Unknown classes stay closed per version.
 
-Allocate one global positive safe-integer journal sequence per accepted mutation, exactly previous +1;
+Allocate one global positive safe-integer journal sequence per entry, including the head-change snapshot
+reissue, exactly previous +1;
 host enrollment sequences remain separate and may have gaps. One writer and one unresolved transition are
 permitted. No multiwriter merge, sequence reset/wrap, or local lock as proof of old-instance exclusion.
 
@@ -246,6 +249,16 @@ rebuilt only from reconciled history; a missing authoritative file is never an e
 E1 rotation may replace envelope signatures while preserving body/id/sequence history; retain the
 previous exact envelope revision in Git, not an id-conflict overwrite.
 
+On every real head change, re-issue the registry's `revocation/1` with the
+identical current cumulative set and strictly greater `issued_at`. Journal that
+snapshot with `op=add`, `record_type=revocation/1` in the same transaction;
+`checkpoint/1.snapshot` references the reissued snapshot id. This is part of the
+candidate, not a separate intake request. It preserves S3 `VerifyJournal` proof
+of publication before S4. See [S0 §2.6, lines 579–584](https://github.com/relux-works/waggle/blob/9b42338b8a57d12a21da4db4375b269deacdd6bf/spec/swarm-envelope-2.md#L579-L584)
+and [P-JRN-reissue](https://github.com/relux-works/waggle/blob/9b42338b8a57d12a21da4db4375b269deacdd6bf/vectors/swarm-envelope-2/1-positive/P-JRN-reissue.json),
+with negatives [N-JRN-reissue-old-snapshot](https://github.com/relux-works/waggle/blob/9b42338b8a57d12a21da4db4375b269deacdd6bf/vectors/swarm-envelope-2/0-negative/N-JRN-reissue-old-snapshot.json)
+and [N-JRN-reissue-no-entry](https://github.com/relux-works/waggle/blob/9b42338b8a57d12a21da4db4375b269deacdd6bf/vectors/swarm-envelope-2/0-negative/N-JRN-reissue-no-entry.json).
+
 Prepare an immutable complete candidate and signed commit privately, with a recoverable transaction
 manifest outside public record schemas. That manifest binds base/candidate Git ids, all exact bytes,
 outcomes, watermark and next head. It is local recovery state, not an invented identity-journal wire
@@ -257,7 +270,9 @@ Do not assume `git commit` or rename alone guarantees power-loss durability.
 The published ref is the last visibility step after witnessed resolution (§6);
 external pins still need review/approval. Git/storage adapters must be qualified
 on the chosen filesystem. Disable hooks, filters, ambient config and credential
-helpers; never execute a repository-supplied program. Git dependency is Q6.
+helpers; never execute a repository-supplied program. Q6 (decided 2026-10-24,
+content review) selects a protected, bounded system-Git adapter under the existing
+dependency policy and a separate maintainer signer; operator pin approval stays external.
 
 For real head changes, serialization couples record bytes, journal entry,
 checkpoint, id binding, request outcome and watermark. Readers see one resolved
@@ -272,7 +287,7 @@ or garbage collection may discard acknowledged evidence or pending candidates.
 
 F's closed `revocation/1` is one issuer's signed complete cumulative set with
 issued_at and effective entries. Preserve exact base bytes/id until a real
-change; registry signatures never replace operator/grant-domain signatures.
+head change; registry signatures never replace operator/grant-domain signatures.
 The global journal orders references, not each domain's cumulative truth.
 Validate original issuer authority, all retained/future-effective entries and
 continuity; never remove entries or move from later. Neither revocation/1 nor
@@ -287,9 +302,12 @@ issued_at, and a caller-supplied last-seen freshness fact; rollback, fork and
 gap refuse. This design invents no fields or signing preimage and admits no
 freshness yet.
 Only real head changes append journal entries/create checkpoints and use witness
-intent/resolution plus custodian barriers. A changed cumulative set completes
-that real transaction first; unchanged ticks preserve snapshot bytes/id and
-registry/witness positions. No silent fallback to snapshot reissue.
+intent/resolution plus custodian barriers. Every real head change includes §4's
+snapshot reissue with the identical cumulative set, strictly greater issued_at,
+same-transaction add/revocation/1 journal entry and checkpoint snapshot reference.
+A changed cumulative set completes that real transaction first; unchanged ticks
+preserve snapshot bytes/id and registry/witness positions. Idle periods still require S4 freshness/1; no silent
+fallback to snapshot reissue.
 
 Publish freshness every 20 seconds and promptly after a real head change:
 4,320 freshness publications/day with no unchanged-head journal/witness append.
@@ -299,13 +317,14 @@ transport and conservative uncertainty costs. This is not measured availability;
 a 60-second cadence has no useful margin. External issuer domains still need
 their own qualified currentness; registry freshness cannot re-sign their content.
 
-Both old base issued_at AND old checkpoint.at fail today's S3 high-level
-currentness checks. B needs a new reviewed path admitting immutable base and
-resolved witnessed binding before S4 freshness currentness; the pending separate
+The real head-change reissue keeps publication proofs verifiable by S3
+`VerifyJournal` before S4. During idle periods, both old base issued_at AND old
+checkpoint.at fail today's S3 high-level currentness checks. B needs a new
+reviewed path admitting immutable base and resolved witnessed binding before S4 freshness currentness; the pending separate
 B entry point verifies the base without its current-age rule, then freshness/1.
 Changing only the snapshot check is insufficient. Never weaken `VerifyJournal`/`CheckRevocation`
-globally, lower Now/watermark or manufacture younger context. Integration and
-consumer activation wait for that path; low-level math supplies no authority.
+globally, lower Now/watermark or manufacture younger context. Idle-period B
+consumer activation waits for that path; low-level math supplies no authority.
 
 ### 5.2 Freshness durability, complete history and restore
 
@@ -325,10 +344,11 @@ Retain all freshness history, predecessor evidence and consumer high-water
 outside disposable caches. Before use, require a qualified complete-history
 check to an independently retained published freshness head. Off-node backups,
 consumer-held last-seen positions and authenticated head comparison supply
-surviving evidence; a restored local counter alone supplies none. S4/Q12 must
-qualify the complete-publication mechanism and independent retention before B
-activation, without adding unchanged-head witness/custodian writes. Missing
-coverage or an unverifiable gap fences; do not claim this mechanism exists.
+surviving evidence; a restored local counter alone supplies none. Q12 (decided
+2026-10-24, content review) requires complete chained freshness history and
+off-node heads retained before use. S4 integration must qualify that mechanism
+and independent retention before B activation, without adding unchanged-head
+witness/custodian writes. Missing coverage or an unverifiable gap fences; do not claim this mechanism exists.
 Startup/restore reconciles both real registry/witness lineage and the independent
 freshness floor/history, plus time continuity and old-instance exclusion.
 Missing newer bytes or ambiguous visibility stays fenced; never initialize
@@ -362,10 +382,12 @@ keeps its existing authority and restore fence.
 
 The distribution bound assumes a qualified complete, cumulative, non-equivocating
 publication sequence. It starts at first-containing issuance S, not submission:
-`max(S + A, from)` for maximum age A. D29 completion still needs a durable
-consumer barrier/acknowledgement set or proven authority expiry (Q7); critical
-effects check their authority owner immediately before effect. Emergency stop
-works independently; restart requires separate current authority.
+`max(S + A, from)` for maximum age A. Per the owner decision recorded in Q7
+(2026-10-24, content review), D29 completion requires consumer acknowledgement
+with explicit consumer sets and durable barriers, or proven expiry of all prior
+authority. Critical actions perform a final online check with their authority
+owner immediately before effect. An intake acknowledgement is never completion.
+Emergency stop works independently; restart requires separate current authority.
 
 ### 5.4 Capacity
 
@@ -475,7 +497,7 @@ S3 already treats same-head/sequence, different checkpoint id as a fork.
 Use WS's checkpoint-inclusion stream, original wrappers/receipts, pinned mTLS,
 challenge-bound linearizable latest reads, full control/record/intent proofs and
 strict synchronous off-node custodian per append acknowledgement and fresh-read
-cross-check. WS's old snapshot-reissue recommendation is superseded by D38=B:
+cross-check. WS's old idle snapshot-reissue recommendation is superseded by D38=B:
 only real changes use inclusion, with no local wrapper-format change. These are required qualification dependencies, not deployed services.
 All retries/pages/handshakes/custodian reads share the remaining five-second
 maximum (or stricter consumer budget); timeout/unavailable custodian closes
@@ -589,10 +611,11 @@ Retain a durable effective-time watermark and previous decision bound outside
 the rollback domain. F evaluates expiry at `max(now,W)` and starts at `min(now,W)`;
 snapshot issuance cannot be future at that lower bound. New process lower bound
 must be strictly after previous `P + deltaP`; wait monotonically and resample.
-Waiting cannot recover missing history or erase a hold. Propose zero backward
-tolerance and operator recovery after a continuity failure. Cross-process hold
-preservation and dedicated-service authdata qualification are Q11, not supplied
-by the provider import. Time failure never blocks the independent emergency stop.
+Waiting cannot recover missing history or erase a hold. Q11 (decided 2026-10-24,
+content review) requires a durable watermark, zero backward tolerance and explicit
+recovery after a continuity failure. Cross-process hold preservation and
+dedicated-service authdata remain qualification gates, not supplied by the
+provider import. Time failure never blocks the independent emergency stop.
 
 ## 10. Questions for review
 
@@ -604,16 +627,16 @@ recommendations without reopening accepted S3 or D38=B. Activation is separate.
 | --- | --- |
 | Q1: repository location | Decided, 2026-10-24: separate public service repository, this one; task board private. |
 | Q2: format/profile alignment | S3 journal/checkpoint/roles accepted, 2026-10-24, content review D33–D37; D38=B accepted the same date. S4 owns freshness format and new verifier; wait for reviewed APIs rather than weaken old currentness. General aggregate profiles and K purpose-5 alignment remain gated; recommend reusing original issuer revocation/1 payloads, never signing-domain aliases. |
-| Q3: custody | Software file, isolated signer, hardware or external signer. Recommend isolated closed-profile registry signer as baseline; owner decides extraction/availability/recovery tradeoffs. External issuers qualify their own custody/currentness. |
-| Q4: API and proof budgets | mTLS endpoint or owner-local socket; recommend mTLS publishers and restricted local administration. This design caps intake at 512 KiB and full publication bundle at 2 MiB separately; WS wrapper fit must preflight before intent or refuse. Freeze framing and qualify representable proofs; a larger/paginated WS transport needs separate review. |
+| Q3: custody | Awaiting owner: registry-owner key custody. Software file, isolated signer, hardware or external signer; recommended baseline is an isolated closed-profile signer. Owner decides extraction/availability/recovery tradeoffs. External issuers qualify their own custody/currentness. |
+| Q4: API and proof budgets | Decided, 2026-10-24, content review: mTLS for publishers and a restricted local socket for administration. Keep the caps: intake at 512 KiB and full publication bundle at 2 MiB separately; WS wrapper fit must preflight before intent or refuse. Freeze framing and qualify representable proofs; a larger/paginated WS transport needs separate review. |
 | Q5: filenames/history | Decided here, 2026-10-24: 16-digit decimal sequences cover safe integers; physical fanout may be flat or prefix directories, recommend bounded fanout after measurement. S3 does not prescribe Git layout; R's enrollments/*.json and E1 history exception stay exact. |
-| Q6: Git dependency | Fixed system Git or new Go dependency. Recommend protected bounded system adapter under existing dependency policy, qualified durability and separate maintainer signer; operator pin approval external. |
-| Q7: revocation completion | Durable consumer acknowledgement barrier or proven expiry of all authority, plus consumer-selected final online checks. Recommend explicit consumer set/barriers; landed B §6.5 still preserves broker v0 authority/restore fences until migration. Publication receipt/freshness is not completion. |
+| Q6: Git dependency | Decided, 2026-10-24, content review: protected, bounded system-Git adapter under the existing dependency policy, with a separate maintainer signer and qualified durability; operator pin approval stays external. |
+| Q7: revocation completion | Decided, 2026-10-24, content review, per owner decision: consumer acknowledgement with explicit consumer sets and durable barriers, or proven expiry of all prior authority; critical actions require a final online check. An intake acknowledgement is never completion. Landed B §6.5 still preserves broker v0 authority/restore fences until migration. Publication receipt/freshness is not completion. |
 | Q8: capacity | Decided, 2026-10-24, content review D36: pages under one complete signed head; Merkle/narrower-domain alternatives deferred. Wire/completeness/retention qualification remains future work; current count AND byte refusal, fence, retention and operator signal stay mandatory. |
 | Q9: unchanged refresh | Decided, 2026-10-24, content review D38=B: 20-second separate freshness publications; no unchanged journal/checkpoint/witness/custodian append, per-entry checkpoint for real changes. S4 gates exact format/new currentness API. No owner-root-change op; D31 recovery remains separate. |
-| Q10: witness coordination | WS server is selected; independent witness-side bridge, exact eight-to-six adapter and mandatory advancing anchor, content review decision, 2026-10-24. Bridge/candidate/exclusion implementation and strict custodian provider/SLA remain unqualified; recommend independent validation, original evidence retention and no writer credentials. Registrar WC2 stays separate. |
-| Q11: time activation | Provider alone or qualified durable watermark/hold continuity and dedicated-service authdata. Recommend latter, zero backward tolerance and explicit recovery; missing independent history fences. |
-| Q12: complete publication/restore | Independent observer, authenticated consumer comparison or jointly qualified publication-history service. Recommend S4-reviewed complete chained freshness history and off-node retained heads before use, with §5.2 atomic local publication and fail-closed restore; no invented wire or available service claim. Historical re-verification needs a separate future path; gossip alone cannot prove absent hidden publications. Co-location/partition and no pre-publication deadline remain explicit. |
+| Q10: witness coordination | WS server is selected; independent witness-side bridge, exact eight-to-six adapter and mandatory advancing anchor, content review decision, 2026-10-24. Off-node custodian provider is awaiting owner; bridge/candidate/exclusion implementation and strict custodian SLA remain unqualified; recommend independent validation, original evidence retention and no writer credentials. Registrar WC2 stays separate. |
+| Q11: time activation | Decided, 2026-10-24, content review: durable watermark, zero backward tolerance and explicit recovery. Hold continuity and dedicated-service authdata remain qualification gates; missing independent history fences. |
+| Q12: complete publication/restore | Decided, 2026-10-24, content review: complete chained freshness history and off-node heads retained before use, with §5.2 atomic local publication and fail-closed restore; no invented wire or available service claim. Historical re-verification needs a separate future path; gossip alone cannot prove absent hidden publications. Co-location/partition and no pre-publication deadline remain explicit. |
 
 ## 11. Implementation slices and evidence plan
 
@@ -628,9 +651,18 @@ No production activation follows from mocks or two implementations agreeing.
 | 3. Serialized durable storage/bounds | `TestChangedBytesSameIDRefused`, `TestConcurrentHeadConflict`, `TestSyncFailureFences`, `TestSequenceExhaustionNoWrap`, `TestPublicationProofCapRefused`, `TestWitnessWrapperCapRefused` | `TestExactRetrySameOutcome`, `TestCrashReconcilesExactCommit`, `TestBoundedCompleteProofAccepted`, `TestWrapperFitsBeforeIntent`; no writes/intent on preflight refusal. |
 | 4. Enrollment projection | `TestInvalidMirrorFencesWholeLoad`, `TestUnapprovedCommitRefused`, `TestTombstoneHistoryCannotDisappear`, `TestReservedSigsWinsSnapshotWide` | `TestOfflineEnrollmentSignedCommitAccepted`; unchanged P/R and approved E1 rotation. |
 | 5. Journal/witness proof | `TestWriterCannotAppendWitness`, `TestStaleChallengeRefused`, `TestUnresolvedIntentFences`, `TestRestoredCloneCannotServe`, `TestSameHeadCheckpointForkRefused`, `TestAdvancingAnchorMissingRefused`, `TestAnchorTimeRegressionRefused`, `TestCheckpointTimeRegressionRefused`, `TestEightFieldProjectionRefused`, `TestPublicationLinkLossRefused`, `TestIntentOnlyPublicationRefused`, `TestDelayedProofExpiredRefused` | `TestExactIntentCommitResolution`, `TestLostResolutionReceiptFreshHead`, `TestAnchoredSuffixAccepted`, `TestValidatedProjectionReduced`, `TestPublicationBundleVerifiedAtIssue`; real ACL/crash/custodian/exclusion qualification, archive is not a current receipt. |
-| 6. Base snapshots/time/capacity | `TestStaleSnapshotRefused`, `TestEqualIssueTimeDifferentBytesRefused`, `TestCumulativeRemovalRefused`, `TestGapRefused`, `TestSplitHeadSignalsAndRefuses`, `TestSnapshotCapacitySignalsWithoutDrop`, `TestTimeLossNoPublication` | `TestFreshCompleteSnapshotAccepted`, `TestConsumerAgeBoundary`, `TestMatchingGossipHeadAccepted`; issuer profiles, byte/count limits and provider qualification. |
+| 6. Base snapshots/time/capacity | `TestHeadChangeStaleSnapshotRefused`, `TestHeadChangeOldSnapshotRefRefused`, `TestHeadChangeNoEntryRefused`, `TestStaleSnapshotRefused`, `TestEqualIssueTimeDifferentBytesRefused`, `TestCumulativeRemovalRefused`, `TestGapRefused`, `TestSplitHeadSignalsAndRefuses`, `TestSnapshotCapacitySignalsWithoutDrop`, `TestTimeLossNoPublication` | `TestHeadChangeReissueAccepted` (P-JRN-reissue shape), `TestFreshCompleteSnapshotAccepted`, `TestConsumerAgeBoundary`, `TestMatchingGossipHeadAccepted`; identical cumulative set reissued at greater issued_at, same-transaction add/revocation/1 entry and new checkpoint snapshot reference; issuer profiles, byte/count limits and provider qualification. |
 | 7. B freshness only after S4 | `TestFreshnessMissingRefused`, `TestFreshnessStaleRefused`, `TestFreshnessWrongRootRefused`, `TestFreshnessWrongSnapshotRefused`, `TestFreshnessWrongHeadRefused`, `TestFreshnessSameSeqDifferentBindingRefused`, `TestFreshnessBackwardSeqRefused`, `TestFreshnessBackwardTimeRefused`, `TestFreshnessPredecessorMissingRefused`, `TestFreshnessHeadRaceRefused`, `TestFreshnessUnresolvedIntentRefused`, `TestSlowWitnessClosesFreshness`, `TestFreshnessHistoryOmissionRefused`, `TestRestoredFreshnessStateFences`, `TestOldS3RejectsAgedBase`, `TestFreshnessCannotReviveAuthority` | `TestFreshnessKeepsJournalHead`, `TestRealChangeUsesWitnessTransaction`, `TestAgedBaseAcceptedOnlyByReviewedBPath`, `TestFreshnessAtomicRetry`; identical base bytes and unchanged registry/witness positions on healthy freshness; exact effects and boundaries verified, never a global old-verifier waiver. |
 | 8. Restore and consumer activation | `TestRestoredBytesCannotBootstrap`, `TestJointLossFences`, `TestStopWorksWithoutRegistry`, `TestNoCompletionOnIntakeAck`, `TestStoredProofNotCurrentAuthority` | `TestOffNodeExactCandidateRecovery`, `TestReviewedConsumerMigration`, `TestKeymakerPublicationAndStatus`; owner barriers, independent retained proofs/freshness and consumer-specific activation. |
+
+Slice 6 pairs the P-JRN-reissue positive shape with a stale snapshot under a new
+checkpoint (`TestHeadChangeStaleSnapshotRefused`, `journal_unavailable`) and the
+pinned fixture negatives: N-JRN-reissue-old-snapshot
+(`TestHeadChangeOldSnapshotRefRefused`, `checkpoint_snapshot_invalid`) and
+N-JRN-reissue-no-entry (`TestHeadChangeNoEntryRefused`, `journal_fork`). Each
+pre-intent admission refusal must leave an empty plan and no publication,
+witness intent or local mutation. Real head changes use this S3 path before S4; slice 7's freshness/1
+remains mandatory for idle periods after S4 qualification.
 
 Content-review acceptance of this design precedes code. Later implementation evidence
 must distinguish unit coverage, negative controls, crash/ACL qualification and
