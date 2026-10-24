@@ -196,7 +196,7 @@ func TestStrictBoundedCCJRefused(t *testing.T) {
 	}
 	for _, raw := range [][]byte{
 		append(append([]byte{}, good[:len(good)-1]...), []byte(`,"owner":"owner-a"}`)...),
-		[]byte(`{"owner":"owner-a","\u006fwner":"owner-a"}`),
+		append(append([]byte{}, good[:len(good)-1]...), []byte(`,"\u006fwner":"owner-a"}`)...),
 		[]byte(`{"owner":1.0}`), []byte(`null`), []byte(`[]`), append(good, []byte(` {}`)...),
 		[]byte(strings.Repeat("[", 17) + strings.Repeat("]", 17)),
 	} {
