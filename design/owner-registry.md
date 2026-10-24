@@ -23,7 +23,7 @@ Immutable inputs read for this design:
 | --- | --- |
 | F | [Shared formats](https://github.com/relux-works/waggle/blob/9b42338b8a57d12a21da4db4375b269deacdd6bf/spec/swarm-envelope-2.md), §§2–7: envelopes, signer contract, provenance, refusal order and consumer gates. |
 | D | [D1–D38](https://github.com/relux-works/waggle/blob/9b42338b8a57d12a21da4db4375b269deacdd6bf/UNRESOLVED_QUESTIONS.md), especially D30 and D32–D38. D33–D37 and B are accepted by content review on 2026-10-24; the pinned text still presents them for review and recommends A, superseded here by that decision. |
-| K | [Key service](https://github.com/relux-works/swarma-keymaker/blob/5eb89870d25cd9c4dd9e71180d9449f18fba206f/spec/keymaker.md), §§4.3, 5, 8–9: custody, pins, enrollment and purpose 5. |
+| K | [Key service](https://github.com/relux-works/swarma-keymaker/blob/0ae0c4e93c3fae9db2bcadcfb5eeafbdcf0668c0/spec/keymaker.md), §§4.3, 5, 8–9: custody, pins, enrollment and purpose 5. |
 | W | [Witness consumer](https://github.com/relux-works/swarma-keymaker/blob/5eb89870d25cd9c4dd9e71180d9449f18fba206f/spec/keymaker-witness.md), §§3.3–6, 8: operations, intent ordering, recovery and WC1. |
 | B | [Broker](https://github.com/relux-works/swarma-credential-broker/blob/f2c01f52477b5885aefd5b6bd04d09a6a22813b2/spec/broker.md), §§6.4–6.6: local authority and the registry boundary. |
 | T | [Time policy](https://github.com/relux-works/swarma-credential-broker/blob/f2c01f52477b5885aefd5b6bd04d09a6a22813b2/docs/time-policy.md) and [provider contract](https://github.com/relux-works/swarma-credential-broker/blob/f2c01f52477b5885aefd5b6bd04d09a6a22813b2/docs/time-confidence.md). |
@@ -61,7 +61,7 @@ collections must not overlap roles; unsigned key_class never selects a profile.
 | Grant-service subject | Parent-authorized `grant/1` only | External dedicated service signer, never the message signer; exact protected service collection | Grant-root re-attestation and cumulative key/attestation/parent revocation | Delegated rights within a current covering parent, never root, message, act or registry authority |
 | Agent author key | F's agent message profile, never grants in v0 | External key-service custody, resolved active caller only; registry stores attestation/public key | New qualified binding/attestation, revoke old binding/key; no stale generation reuse | Agent provenance within surviving authority, not owner/operator rights |
 | Operator device key | Published P-256 low-S act/approval and permitted delegated-grant profiles | Owner's device; qualified local signer/presence path only | Operator-root re-attestation and signed revocation; recovery remains separately gated | Device acts/delegated grants within current authority; no implicit A3, root or recovery powers |
-| Registry-owner root | Registry-scoped `revocation/1` and checkpoints; future freshness/1 only after S4, with agent scope pinned to the exact purpose-5 root | Online restricted signer on trust node, or external option in Q3; registry-built reviewed profiles only | Owner-approved protected pin transition, continuity preserved; new profiles/recovery require review | False scoped revocations/checkpoints, future freshness and withholding, not other roots' signatures |
+| Registry-owner root | Registry-scoped `revocation/1` and checkpoints; future freshness/1 only after S4, with agent scope pinned to the exact purpose-5 root | Separate signer process under its own account on the trust node (Q3); pre-approved record profiles only | Owner-approved protected pin transition, continuity preserved; new profiles/recovery require review | False scoped revocations/checkpoints, future freshness and withholding, not other roots' signatures |
 | Offline enrollment publisher | E1 Ed25519 `enrollment/1` only | Offline with the owner; explicit publisher operation, never service access | R's full-history re-sign and atomic pin advance; bodies/ids/tombstones retained | Forged enrollment envelopes; maintainer review and operator commit pin remain separate barriers |
 | Registry maintainer | Git commits for R's allowlist | Separate online signer on trust node (Q6); export writer may request signatures, operator alone approves deployment pins | Owner changes allowlist and exact approved revision without resetting history | Forged commit signatures, not E1 content or deployment approval |
 | Witness service | Its own receipt/head profiles | Separate online witness account/process on trust node; witness daemon only | Explicit owner-provisioned key epochs, old continuity and off-node checkpoints retained | False heads/receipts within its scope; co-location leaves full-node compromise shared |
@@ -74,18 +74,14 @@ root, including E1. External issuer custody is not decided here: if an issuer
 cannot provide fresh required signatures, its domain stays unavailable.
 
 Recommend an independently generated Ed25519 registry-owner key; no assigned key-service purpose or
-derivation is implied. The online signing component lives in the registry account's boundary on the trust
-node, or in an explicitly chosen external custody provider. It accepts only locally constructed reviewed
-profiles, not arbitrary preimages. No registry access to message/SSH signing is needed.
+derivation is implied. Q3 is decided by the owner, 2026-10-24: the registry-owner
+key is held by a separate signer process under its own account on the trust node.
+This isolated closed-profile signer accepts only pre-approved record profiles,
+not arbitrary preimages. No registry access to message/SSH signing is needed.
+Process/account separation narrows accidental exposure; full-node compromise
+still reaches the signer. No online delegation format is invented.
 
-Registry-owner key custody is awaiting owner (Q3); the recommended baseline is an isolated closed-profile signer.
-The owner chooses protection: a protected software file is simple but exposes the key to
-service-memory compromise; a separate signer process/account with a closed signing API narrows accidental
-exposure but not full-node compromise; hardware or an independently administered remote signer can
-prevent extraction but adds latency, availability and authorization-policy dependencies. An offline key cannot autonomously sustain freshness publications.
-No online delegation format is invented to hide that tradeoff.
-
-Any software option requires private directories, owner/mode and no-link checks, no secret
+The signer requires private directories, owner/mode and no-link checks, no secret
 logging/argv/environment/core dumps, restricted backups and qualified swap policy. Memory locking reports
 its actual result; managed-runtime clearing does not prove non-extraction. Public pins and rotation
 approval stay external.
@@ -158,8 +154,8 @@ for the corresponding profile; retain typed codes and empty refusal plans.
 No function commits, executes effects, fetches or authenticates witness wire.
 Revalidate at the serialized commit/publication boundary. Use P's CCJ-1, never
 a second codec/verifier. Current-generation truth needs qualified external
-evidence; K's purpose-5 preimage alignment remains a separate activation gate,
-not an alias accepted because S3 exists.
+evidence; K's purpose-5 preimage is aligned at the specification level (§5.5),
+while runtime qualification remains a separate activation gate.
 
 D33 service intake requires Ed25519, key_class=service, purpose=grant-service,
 roles=[author], actions=[grant.sign], exact bounded owner binding, positive
@@ -404,8 +400,11 @@ narrower-domain alternatives are deferred, not locally selectable policy.
 
 ### 5.5 Keymaker consumer and proof of publication
 
-Keymaker submits original purpose-5 `attestation/1` through intake; alignment
-of K's signing preimage with F remains an explicit gate. It consumes activity
+Keymaker submits original purpose-5 `attestation/1` through intake. The purpose-5
+signing preimage is aligned at the specification level: [K's message profile,
+lines 417–423](https://github.com/relux-works/swarma-keymaker/blob/0ae0c4e93c3fae9db2bcadcfb5eeafbdcf0668c0/spec/keymaker-msg.md#L417-L423)
+against [F's SigningPreimage, lines 193–202](https://github.com/relux-works/waggle/blob/9b42338b8a57d12a21da4db4375b269deacdd6bf/record/record.go#L193-L202).
+Runtime qualification remains a gate. It consumes activity
 status and its domain's original revocation/1 plus checkpoint head and freshness.
 Activity needs independently qualified current-generation evidence, not an old
 attestation or registry cache assertion. Publishing identity is not minting grants.
@@ -414,17 +413,19 @@ Return, or ensure the consumer already durably holds, this complete bundle:
 
 1. Exact original signed record bytes/content id and required issuer/authority evidence.
 2. Exact unsigned E_n binding seq, op, record_type and that record id.
-3. Exact signed C_n, preferably, or C_(n+1) plus E_(n+1) linking E_n.
+3. Exact signed C_(n+1) plus E_(n+1) linking E_n and journaling the reissued revocation/1.
 4. Complete oldest-first suffix from a previously independently trusted projection,
    including its authenticated raw anchor, within the cap.
 5. Exact signed registry-owner snapshot whose id equals checkpoint.snapshot.
 6. Independently verified exact witness intent/resolution originals and both receipts,
    plus fresh challenged head/continuity proving that exact checkpoint is resolved.
 
-checkpoint.head is the entry id, never the original record id. From anchor n-1,
-C_n needs two entries and C_(n+1) three; both use ONE candidate checkpoint and
-conflict=nil. A nearer authenticated anchor may need fewer entries; with an
-anchor at most63 new entries fit. A second checkpoint is fully admitted current
+Under the reissue rule, the anchor is E_(n-1); E_n is the entry for the published
+record and E_(n+1) the reissued revocation/1, in one transaction. C_(n+1) covers
+that head. The suffix is three entries plus one checkpoint, within the 64-entry
+and 2-checkpoint limits, with conflict=nil. checkpoint.head is the entry id,
+never the original record id. With an anchor at most63 new entries fit.
+A second checkpoint is fully admitted current
 fork evidence against the same snapshot context, never the previous/next slot.
 Compare returned seq/id/type/op to authenticated E_n and independently verify
 the original content profile. `VerifyJournal` returns only checkpoint id and
@@ -626,8 +627,8 @@ recommendations without reopening accepted S3 or D38=B. Activation is separate.
 | Question | Options, recommendation or recorded decision |
 | --- | --- |
 | Q1: repository location | Decided, 2026-10-24: separate public service repository, this one; task board private. |
-| Q2: format/profile alignment | S3 journal/checkpoint/roles accepted, 2026-10-24, content review D33–D37; D38=B accepted the same date. S4 owns freshness format and new verifier; wait for reviewed APIs rather than weaken old currentness. General aggregate profiles and K purpose-5 alignment remain gated; recommend reusing original issuer revocation/1 payloads, never signing-domain aliases. |
-| Q3: custody | Awaiting owner: registry-owner key custody. Software file, isolated signer, hardware or external signer; recommended baseline is an isolated closed-profile signer. Owner decides extraction/availability/recovery tradeoffs. External issuers qualify their own custody/currentness. |
+| Q2: format/profile alignment | S3 journal/checkpoint/roles accepted, 2026-10-24, content review D33–D37; D38=B accepted the same date. S4 owns freshness format and new verifier; wait for reviewed APIs rather than weaken old currentness. General aggregate profiles and K purpose-5 runtime qualification remain gated; the signing preimage is aligned at the specification level (§5.5); recommend reusing original issuer revocation/1 payloads, never signing-domain aliases. |
+| Q3: custody | Decided, 2026-10-24, owner decision: registry-owner key held by a separate signer process under its own account on the trust node; only pre-approved record profiles (isolated closed-profile signer). Full-node compromise still reaches the signer. External issuers qualify their own custody/currentness. |
 | Q4: API and proof budgets | Decided, 2026-10-24, content review: mTLS for publishers and a restricted local socket for administration. Keep the caps: intake at 512 KiB and full publication bundle at 2 MiB separately; WS wrapper fit must preflight before intent or refuse. Freeze framing and qualify representable proofs; a larger/paginated WS transport needs separate review. |
 | Q5: filenames/history | Decided here, 2026-10-24: 16-digit decimal sequences cover safe integers; physical fanout may be flat or prefix directories, recommend bounded fanout after measurement. S3 does not prescribe Git layout; R's enrollments/*.json and E1 history exception stay exact. |
 | Q6: Git dependency | Decided, 2026-10-24, content review: protected, bounded system-Git adapter under the existing dependency policy, with a separate maintainer signer and qualified durability; operator pin approval stays external. |
