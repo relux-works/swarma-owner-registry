@@ -8,8 +8,9 @@ import (
 )
 
 // Direct and wrapped signer errors forward only the journal signer's five
-// failure codes. Every refusal has zero output/plan and no state or persistence
-// effect; a real signer still verifies and commits a valid publication.
+// failure codes, and typed-nil errors refuse without panic. Every refusal has
+// zero output/plan and no state or persistence effect; a real signer still
+// verifies and commits a valid publication.
 func TestSignerErrorCodeAllowlist(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -47,6 +48,32 @@ func TestSignerErrorCodeAllowlist(t *testing.T) {
 				noCandidate(t, b, r, tc.want)
 			})
 		}
+	}
+	for _, wrapped := range []bool{false, true} {
+		t.Run(fmt.Sprintf("typed-nil/wrapped=%t", wrapped), func(t *testing.T) {
+			store := &persistence{}
+			s := signerFunc(func([]byte) ([]byte, error) {
+				var typed *journal.Error
+				var err error = typed
+				if wrapped {
+					err = fmt.Errorf("signing failed: %w", err)
+				}
+				return []byte("discarded output"), err
+			})
+			p := publisherWithSigner(t, initial(t), store, s)
+			before := p.LastResolved()
+			defer func() {
+				if v := recover(); v != nil {
+					t.Errorf("typed-nil signer error panicked: %v", v)
+				}
+				unchanged(t, before, p.LastResolved())
+				if store.calls != 0 {
+					t.Error("failed signer persisted")
+				}
+			}()
+			b, r := p.Publish(input(t))
+			noCandidate(t, b, r, "signer_unavailable")
+		})
 	}
 	t.Run("valid-signer", func(t *testing.T) {
 		store := &persistence{}

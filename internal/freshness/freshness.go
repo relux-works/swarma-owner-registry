@@ -358,7 +358,8 @@ func (p *Publisher) Publish(in Input) ([]byte, Outcome) {
 		raw, e = p.signer.Sign(encoded)
 		if e != nil {
 			var typed *journal.Error
-			if errors.As(e, &typed) {
+			if errors.As(e, &typed) && typed != nil {
+				// Rollback preserves BuildCheckpoint's retained-time failure in the shared vocabulary.
 				switch typed.Code {
 				case journal.Malformed, journal.ProfileRefused, journal.SignerUnavailable, journal.SignerInvalid, journal.Rollback:
 					return no(string(typed.Code))
