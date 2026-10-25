@@ -690,3 +690,7 @@ Formatting preserves the formatter's exit status, including syntax errors in
 files excluded from the current platform's build. Checks report to stdout/stderr;
 local logs belong in a disposable workspace scratch directory, not versioned
 source. The workflow writes no reports or deployment artifacts.
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
