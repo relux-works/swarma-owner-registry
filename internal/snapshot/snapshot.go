@@ -178,6 +178,9 @@ func snapshot(raw []byte, root string) (map[string]any, []Entry, error) {
 	if len(raw) > MaxBytes {
 		return nil, nil, fail(CapacityExhausted)
 	}
+	if e := checkEntryCount(raw); e != nil {
+		return nil, nil, e
+	}
 	m, e := readObject(raw)
 	if e != nil {
 		return nil, nil, e
