@@ -12,12 +12,12 @@ publication, deployment or qualification evidence.
 
 ## Packages and protected configuration
 
-`internal/contracts` freezes the reviewed S4 revision
-`f76a400ebeb599b95a9bf9b2c59b522bef0392d8`, six service-supported record types
+`internal/contracts` freezes the reviewed S5 revision
+`5f4e7435d75697385ff6ce15a7501ac6f31c8ea5`, six service-supported record types
 (`attestation/1`, `grant/1`, `revocation/1`, `enrollment/1`, `journal-entry/1`,
 `checkpoint/1`), three key classes (`agent`, `operator-device`, `service`) and
 the exact D33 grant-service profile. `message/1` and `operator-act/1` have no
-standalone intake profile here. `freshness/1` exists in S4 only for internal registry publication; it has no intake path.
+standalone intake profile here. `freshness/1` remains an internal registry publication in S5; it has no intake path.
 
 `internal/pins.Parse` accepts caller-protected CCJ-1 JSON, at most 16 KiB and
 eight container levels. It uses the pinned `record.Parse` and registrar `ccj`
@@ -61,6 +61,10 @@ and cannot expand the compiled record/profile registry. The three S4 gates
 respectively declare publication, freshness verification and re-anchor readiness;
 opening one leaves the others closed and implements none of those later slices.
 
+S5 receipt fields exist in the dependency, but this intake supplies no receipt,
+requirement flag or margin. Receipt composition remains separate adapter work;
+no new activation gate is declared by this re-pin.
+
 The immutable `Config` exposes:
 
 - `Pin`: a role's public pin by value.
@@ -68,7 +72,7 @@ The immutable `Config` exposes:
   signatures or activation dependencies.
 - `CheckPurpose5`: exact requested root and purpose against the protected scope.
 - `IsOpen` and `Require`: gate queries and typed closed-gate refusals.
-- `VerifierContext`: a fresh immutable snapshot of static S4 pins only. Signed,
+- `VerifierContext`: a fresh immutable snapshot of static S5 pins only. Signed,
   time, generation and witness evidence remain unavailable. Consumers must
   enforce their dependent gates and supply qualified evidence separately.
 

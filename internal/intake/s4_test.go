@@ -75,7 +75,7 @@ func requirePinRefusal(t *testing.T, d map[string]any, want pins.Code) {
 	}
 }
 
-// S3 policy cannot coexist with the S4 build; real signed freshness bytes still have no intake route under valid S4 policy.
+// S3 policy cannot coexist with the current build; real signed freshness bytes still have no intake route under valid policy.
 func TestS3PinCannotAdmitFreshness(t *testing.T) {
 	s := load(t, "P-SVC-chain")
 	check(t, s, "accept")

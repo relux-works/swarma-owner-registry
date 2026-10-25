@@ -1,7 +1,7 @@
-// Package contracts freezes the reviewed S4 service surface, not runtime admission.
+// Package contracts freezes the reviewed S5 service surface, not runtime admission.
 package contracts
 
-const Revision = "f76a400ebeb599b95a9bf9b2c59b522bef0392d8"
+const Revision = "5f4e7435d75697385ff6ce15a7501ac6f31c8ea5"
 
 // RecordTypes returns a copy of the service's closed record types. Message/act
 // intake and registry-internal freshness publication are outside this list.

@@ -37,12 +37,11 @@ S4 at `f76a400ebeb599b95a9bf9b2c59b522bef0392d8` is merged and
 adds freshness/1, D39 journal narrowing, D40 state/read bounds and D41 explicit
 re-anchor to S3's journal/checkpoint contracts. F §§2.7, 2.9, 6–7 and D38–D41
 are the public sources for the requirements below. Content approval and landing
-do not activate this service or qualify consumers. The code module remains pinned to
-S4 `f76a400ebeb599b95a9bf9b2c59b522bef0392d8`. Merged S5 at
-`5f4e7435d75697385ff6ce15a7501ac6f31c8ea5` supplies §5.3's receipt API.
-A separate dependency/profile re-pin (§11, row 1b), intake adapter and consumer
-qualification must precede S5 use; design reconciliation changes no code pin
-or activation gate.
+do not activate this service or qualify consumers. The code module is now pinned
+to S5 `5f4e7435d75697385ff6ce15a7501ac6f31c8ea5` by the dependency/profile
+re-pin (§11, row 1b). Receipt composition in §5.3 still requires its separate
+intake adapter and consumer qualification; the re-pin supplies neither receipt
+consumption nor an activation gate.
 
 Non-goals: message delivery, credential/account issuance, operator-act execution,
 new verifier implementation, root recovery, contact records, registry exchange
@@ -165,10 +164,10 @@ audit, §5.3's adapter supplies `Context.FreshnessReceipt`,
 `Context.FreshnessMarginSeconds` with the
 same whole `SignedSnapshots` Evidence and genuine current facts. Intake consumes
 registry-, operator- and grant-root snapshots: only the receipt-bound registry
-snapshot can replace its own-age check. The current S4-pinned intake retains
+snapshot can replace its own-age check. The current receipt-free intake retains
 the legacy 60-second own-age checks and rebuilds Evidence per admission; it
-still refuses an aged idle registry snapshot until row 1b and the row 7b
-retaining adapter are implemented and qualified. Entry-point classes and the
+still refuses an aged idle registry snapshot until the row 7b retaining adapter
+is implemented and qualified. Entry-point classes and the
 separate new-snapshot submission path are specified in §5.3. Grant/1, D33
 service keys and device attestations also require their relevant external issuer
 snapshots to stay current; a registry receipt cannot extend them (D32, §10 D42).
@@ -501,7 +500,7 @@ Without that evidence stay unavailable, never widen authority on unknown history
 
 S5 §§2.10 and 6 at the pinned `5f4e7435d75697385ff6ce15a7501ac6f31c8ea5`
 provide the API before Keymaker K3 activation and the broker D12 adapter.
-The current S4 module does not expose it; row 1b re-pins the code separately.
+Row 1b now pins that API; receipt composition remains separate adapter work.
 Retain `TestFreshnessCompositionBoundary` and its current-snapshot control for
 legacy/no-receipt behavior. Never substitute younger bytes/time, a weakened
 Context or another verifier for receipt composition.
