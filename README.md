@@ -445,3 +445,38 @@ to production callers. The power-loss model and local locks do not qualify a
 filesystem, witness, Git adapter, service startup or external publication. Build
 and vet produce no persistent output; place redirected test logs and coverage
 reports in a disposable workspace scratch directory.
+
+## Hosted checks
+
+The Linux workflow runs on `ubuntu-26.04` with Go `1.26.10`, local toolchain
+selection and read-only repository permissions. Both actions are pinned to exact
+commits, checkout credentials are not retained, and full history is fetched for
+the pull request's added-line check. Pull requests and pushes to `main` run one
+40-minute job: module verification, build, vet, formatting, public hygiene, an
+explicit dependency-policy test and the verbose full suite. The full-suite
+command has a 35-minute per-package timeout to cover the storage tests. There is
+no privileged-test exemption; the workflow runs the existing tests unchanged.
+Hosted checks supplement the separate review gate and do not qualify deployment.
+
+The workflow commands can also be run locally through the shared scheduling
+wrapper, with Go on `PATH` and `GOTOOLCHAIN=local GOMAXPROCS=2 GOFLAGS=-trimpath`:
+
+```sh
+heavy-slot --label registry -- go mod verify
+heavy-slot --label registry -- go build ./...
+heavy-slot --label registry -- go vet ./...
+heavy-slot --label registry -- bash -e -c 'out="$(gofmt -l .)"; test -z "$out"'
+python3 .scripts/check-hygiene.py --base <base-commit>
+heavy-slot --label registry -- go test ./internal/contracts -run '^TestDependencyPolicy$' -count=1 -v
+heavy-slot --label registry -- go test ./... -count=1 -v -timeout=35m
+```
+
+`.scripts/check-hygiene.py` uses Python 3 and Git to reject attribution metadata
+in all tracked content and the pull request's added lines. It checks link targets
+without following links, emits paths rather than offending content, and fails
+closed when Git or a tracked file is unavailable. The optional base must be an
+exact commit ID; an initial push's zero base is covered by the full tracked scan.
+Formatting preserves the formatter's exit status, including syntax errors in
+files excluded from the current platform's build. Checks report to stdout/stderr;
+local logs belong in a disposable workspace scratch directory, not versioned
+source. The workflow writes no reports or deployment artifacts.
