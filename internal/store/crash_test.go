@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -54,7 +55,7 @@ func baseline(t *testing.T) []boundary {
 }
 
 // durability checks the contract's ordering at real filesystem boundaries. It
-// supplements, rather than qualifies, the bounded power-loss namespace model.
+// supplements, rather than qualifies, the bounded power-loss content/namespace model.
 type durability struct {
 	t                       *testing.T
 	written, synced, closed map[string]bool
@@ -73,6 +74,8 @@ func (d *durability) before(op, p string) error {
 }
 func (d *durability) after(op, p string) {
 	switch op {
+	case "dir.mkdir":
+		d.dirty[filepath.Dir(p)] = true
 	case "file.write":
 		d.written[p] = true
 	case "file.sync":
@@ -99,6 +102,7 @@ func (d *durability) resolved() {
 // restores the exact independently expected candidate or remains fenced.
 func TestDurabilityFaultMatrix(t *testing.T) {
 	events := baseline(t)
+	t.Logf("commit boundaries=%d faults=%d", len(events), len(events)+1)
 	for i, event := range events {
 		t.Run(fmt.Sprintf("%02d-%s", i, event.Operation), func(t *testing.T) {
 			s, root, r, expected := prepareSecond(t)
@@ -176,52 +180,127 @@ func (s *Store) diskPathForTest() string {
 	return p
 }
 
-// powerModel retains namespace entries only after their own directory sync.
-// At a simulated power cut it discards unflushed names, including renames over
-// CURRENT. It is deliberately a bounded model, not real hardware qualification.
+// powerModel tracks inode CONTENT at file.sync independently of namespace at
+// dir.sync. A newly durable filename with unsynced content survives empty.
+// Renames preserve inode identity; mkdir names survive only parent-dir sync.
+// This bounded model is not a claim about any physical filesystem/device.
+type modelNode struct {
+	Inode     uint64
+	Directory bool
+}
 type powerModel struct {
-	t       *testing.T
-	root    string
-	durable map[string]string
+	t        *testing.T
+	root     string
+	names    map[string]modelNode
+	contents map[uint64][]byte
 }
 
-func newPowerModel(t *testing.T, root string) *powerModel { return &powerModel{t, root, tree(t, root)} }
-func (m *powerModel) sync(dir string) {
-	for p, v := range m.durable {
-		if v != "dir" && filepath.Dir(p) == dir {
-			delete(m.durable, p)
+func modelSnapshot(t *testing.T, root string) map[string]modelNode {
+	t.Helper()
+	out := map[string]modelNode{}
+	e := filepath.WalkDir(root, func(p string, entry os.DirEntry, e error) error {
+		if e != nil {
+			return e
+		}
+		rel, _ := filepath.Rel(root, p)
+		if rel == "." {
+			return nil
+		}
+		var st syscall.Stat_t
+		if e = syscall.Lstat(p, &st); e != nil {
+			return e
+		}
+		out[rel] = modelNode{st.Ino, entry.IsDir()}
+		return nil
+	})
+	if e != nil {
+		t.Fatal(e)
+	}
+	return out
+}
+func newPowerModel(t *testing.T, root string) *powerModel {
+	m := &powerModel{t: t, root: root, names: modelSnapshot(t, root), contents: map[uint64][]byte{}}
+	for p, n := range m.names {
+		if !n.Directory {
+			raw, e := os.ReadFile(filepath.Join(root, p))
+			if e != nil {
+				t.Fatal(e)
+			}
+			m.contents[n.Inode] = raw
 		}
 	}
-	entries, e := os.ReadDir(filepath.Join(m.root, dir))
+	return m
+}
+func (m *powerModel) fileSync(target string) {
+	// file.sync is observed before rename: find the candidate's actual staging
+	// inode by the target's containing directory. Atomic leaves at most one new
+	// staging file on a successful trace (older pending fragments are unchanged).
+	parent := filepath.Dir(target)
+	now := modelSnapshot(m.t, m.root)
+	for p, n := range now {
+		if n.Directory || filepath.Dir(p) != parent {
+			continue
+		}
+		if p != target && !strings.HasPrefix(filepath.Base(p), ".tmp-") {
+			continue
+		}
+		raw, e := os.ReadFile(filepath.Join(m.root, p))
+		if e != nil {
+			m.t.Fatal(e)
+		}
+		m.contents[n.Inode] = raw
+	}
+}
+func (m *powerModel) sync(dir string) {
+	for p := range m.names {
+		if filepath.Dir(p) == dir {
+			delete(m.names, p)
+		}
+	}
+	for p, n := range modelSnapshot(m.t, m.root) {
+		if filepath.Dir(p) == dir {
+			m.names[p] = n
+		}
+	}
+}
+func (m *powerModel) cut() {
+	// Only this test's disposable directory is rewritten, after all store fds close.
+	entries, e := os.ReadDir(m.root)
 	if e != nil {
 		m.t.Fatal(e)
 	}
 	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		p := filepath.Join(dir, entry.Name())
-		b, e := os.ReadFile(filepath.Join(m.root, p))
-		if e != nil {
+		if e = os.RemoveAll(filepath.Join(m.root, entry.Name())); e != nil {
 			m.t.Fatal(e)
 		}
-		m.durable[p] = string(b)
 	}
-}
-func (m *powerModel) cut() {
-	now := tree(m.t, m.root)
-	for p, v := range now {
-		if v != "dir" {
-			if e := os.Remove(filepath.Join(m.root, p)); e != nil {
-				m.t.Fatal(e)
+	paths := sortedKeys(m.names)
+	for _, p := range paths {
+		n := m.names[p]
+		if !n.Directory {
+			continue
+		}
+		if parent := filepath.Dir(p); parent != "." {
+			if _, e = os.Stat(filepath.Join(m.root, parent)); e != nil {
+				continue
 			}
 		}
+		if e = os.Mkdir(filepath.Join(m.root, p), 0700); e != nil {
+			m.t.Fatal(e)
+		}
 	}
-	for p, v := range m.durable {
-		if v != "dir" {
-			if e := os.WriteFile(filepath.Join(m.root, p), []byte(v), 0600); e != nil {
-				m.t.Fatal(e)
+	for _, p := range paths {
+		n := m.names[p]
+		if n.Directory {
+			continue
+		}
+		if parent := filepath.Dir(p); parent != "." {
+			if _, e = os.Stat(filepath.Join(m.root, parent)); e != nil {
+				continue
 			}
+		}
+		if e = os.WriteFile(filepath.Join(m.root, p), m.contents[n.Inode], 0600); e != nil {
+			m.t.Fatal(e)
 		}
 	}
 }
@@ -241,7 +320,7 @@ func crashCall(t *testing.T, fn func()) {
 }
 
 // Every actual boundary is crashed both with surviving process-cache bytes and
-// with the bounded namespace power-loss model. A complete expected candidate is
+// with the bounded content/namespace power-loss model. A complete expected candidate is
 // recovered exactly; missing candidate evidence fences, never returns an older
 // state as success. Directory barriers are asserted before visibility and ack.
 func TestCrashReconcilesExactCommit(t *testing.T) {
@@ -256,6 +335,9 @@ func TestCrashReconcilesExactCommit(t *testing.T) {
 				seen := 0
 				s.disk.hooks = hooks{before: guard.before, after: func(op, p string) error {
 					guard.after(op, p)
+					if op == "file.sync" {
+						model.fileSync(p)
+					}
 					if op == "dir.sync" {
 						model.sync(p)
 					}
@@ -486,8 +568,8 @@ func TestSequencePathsAndOpaqueBytes(t *testing.T) {
 	unchanged(t, root, firstTree)
 }
 
-// Canonical but changed recovery instructions cannot be accepted by a live
-// writer merely because the embedded candidate still has its original digest.
+// Canonical but changed predecessor instructions fence a live writer even
+// though the file keeps its original state-id name.
 func TestManifestMutationFencesLiveWriter(t *testing.T) {
 	s, root := setup(t)
 	mustCommit(t, s, proposal())
@@ -527,8 +609,13 @@ func TestForkedRecoveryFenced(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	m := manifest{Base: firstBase, Request: rival, Candidate: next}
-	if e = os.WriteFile(filepath.Join(root, "transactions", digest(next)+".json"), canonical(m), 0600); e != nil {
+	m, blobs := delta(firstBase, next, rival)
+	for id, b := range blobs {
+		if e = os.WriteFile(filepath.Join(root, "blobs", id+".blob"), b, 0600); e != nil {
+			t.Fatal(e)
+		}
+	}
+	if e = os.WriteFile(filepath.Join(root, "transactions", digest(m)+".json"), canonical(m), 0600); e != nil {
 		t.Fatal(e)
 	}
 	before := tree(t, root)

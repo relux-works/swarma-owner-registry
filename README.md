@@ -148,13 +148,21 @@ lock excludes cooperating local opens, and a mutex serializes all API readers
 and the single writer; neither proves old-instance exclusion or clone safety.
 
 `Preview` validates a request and returns its candidate state ID without writing
-or reserving a sequence. `Commit` repeats the checks under serialization, then
-returns an owned `Outcome`. The caller must retain the preview's expected state
-ID independently before intent: `Open(root, expectedStateID)` and
-`Reconcile(expectedStateID)` require the exact expected latest candidate. A
-missing candidate, fork, incomplete manifest, unsafe path or mismatched expected
-state stays fenced. Disk evidence alone cannot detect complete loss or rollback.
-The later witness adapter must supply that independent recovery authority.
+or reserving a sequence. `Commit` repeats the checks under serialization and
+returns an owned `Outcome`. `Open(root, expectedStateID)` and
+`Reconcile(expectedStateID)` require the exact independently protected latest
+candidate ID. Missing evidence, forks, unsafe paths and mismatched expected IDs
+stay fenced; disk evidence alone cannot detect complete loss or rollback.
+
+A later witness adapter must serialize **Preview → external intent → Commit**
+across the whole sequence, independently retain the complete approved candidate
+inventory **and** expected ID before intent, and independently authenticate the
+latest witness authority. The inventory includes every exact blob, delta,
+record, journal/checkpoint, retained request/outcome and predecessor needed to
+recover the candidate. A digest cannot reconstruct erased bytes. Preview exports
+an identity only; there is no approved-inventory installation/export API in this
+slice. Building and qualifying that cross-system inventory belongs to the later
+adapter. A local successful commit supplies no witness or publication authority.
 
 `Request` carries protected principal/request ID, operation, expected/current head,
 watermark, exact record bytes, opaque journal/checkpoint bytes and opaque outcome.
@@ -162,42 +170,90 @@ Record signatures, authority, journal construction, time qualification and exter
 resolution remain the caller's responsibilities. A new transaction allocates one
 positive sequence through 9007199254740991. Under the lock, changed retained
 arguments refuse `request_conflict`, a different expected head refuses
-`head_conflict`, and exhausted sequence capacity refuses `capacity_exhausted`, in
-that order before reservation. An exact retry returns its retained outcome even
-when later heads exist; it appends nothing and renews no authority. Same content
-ID/different bytes refuses `envelope_conflict`, preserving the original evidence.
+`head_conflict`, then exhausted sequence or byte capacity refuses
+`capacity_exhausted`, before reservation. An exact retry returns its original
+outcome after later heads and restarts, appends nothing and renews no authority.
+Same content ID/different bytes refuses `envelope_conflict`, preserving originals.
 
-The on-disk layout is local recovery state, not a new public record schema:
+The on-disk format is local recovery state, not a public record schema:
 
 | Path | Contents |
 | --- | --- |
 | `anchor.json` | Immutable explicitly created empty baseline |
-| `transactions/<state-id>.json` | Immutable manifest binding base/candidate IDs, a complete candidate image of exact bytes/outcomes, watermark and next head |
-| `records/<type-dir>/<content-id>.json` | Exact caller bytes; the six compiled kinds map `/1` to `-1` (for example `grant-1`); IDs are exactly `sha256:` plus 64 lowercase hex digits |
-| `journal/<seq>.json`, `checkpoints/<seq>.json` | Exact opaque bytes, with 16-digit zero-padded positive decimal positions |
+| `transactions/<state-id>.json` | Append-only delta: base ID, next sequence/head/watermark, this request's path-to-blob digests and retained request/outcome references |
+| `blobs/<digest>.blob` | Immutable exact byte payloads and local request/outcome reference encodings; received bundles and result bytes are independent blobs, deduplicated by exact-byte digest |
+| `records/<type-dir>/<content-id>.json` | Exact caller bytes; six compiled kinds map `/1` to `-1`, for example `grant-1`; IDs are `sha256:` plus 64 lowercase hex digits |
+| `journal/<seq>.json`, `checkpoints/<seq>.json` | Exact opaque bytes at 16-digit zero-padded positive decimal positions |
 | `CURRENT` | The single locally resolved state ID, replaced last |
 | `.tmp-*` in those directories | Retained pending fragments; never authoritative reader inputs |
 
-A commit checks the entire tree, prepares an owned complete image, then writes
-its recoverable manifest, exact files and finally `CURRENT`. Each new file uses a
-checked full write, file fsync, checked close, same-directory atomic rename and
-directory fsync. Component-relative no-follow opens reject links, special files
-and traversal. Any durability error or uncertainty fences readers and writers as
-`state_unavailable`. Reconciliation checks the entire retained lineage against
-the protected expected ID, reconstructs only exact complete candidates and
-re-establishes file/directory durability before exposing them. Missing referenced
-files never become empty reads. Manifests, earlier bytes and pending fragments
-are retained; there is no garbage collection. Complete images deliberately trade
-space and recovery cost for a simple auditable baseline; they copy retained
-history, and are not a large-registry performance qualification.
+Each state ID hashes its complete canonical local delta, including the base ID.
+Recovery verifies and folds the chain from the anchor; later deltas never repeat
+old payloads or full images. A request reference preserves all arguments,
+including nil versus empty byte slices, while each payload is stored once by
+its own digest. Materialized record/journal/checkpoint paths are additional exact
+copies for their existing read layout. Valid unreferenced blobs may survive
+interrupted work and are retained and charged, but confer no authority. Unknown
+manifests or staging owners fence. No history, blob or pending fragment is
+rewritten or garbage-collected. This local delta format does not automatically
+convert older full-image formats; incompatible evidence fences and stays intact.
 
-`Preflight` independently enforces the full received bundle's 2 MiB bound,
-J's 64 entries/two checkpoints/540,672 bytes, F's 64 publications/one checkpoint/
-532,480 bytes and 64 queried IDs/keys, per-record 8,192-byte/depth-16 bounds, and
-the whole WS wrapper's 8,192 bytes including LF. All such refusals happen before
-any intent or filesystem write. The caller supplies the entire received carrier;
-these are budget/shape checks, not proof authentication or WS transport support.
-No complete proof is truncated to fit a carrier.
+A commit audits all authoritative bytes and namespace entries, prepares only its
+delta, then writes the durable manifest, immutable blobs, exact materialized
+files and finally `CURRENT`. Type directories are created on first use with
+checked mkdir and parent-directory barriers. Each file uses a checked full
+write, file fsync, checked close, same-directory rename and directory fsync.
+Component-relative no-follow opens reject links, special files and traversal.
+Any durability error or uncertainty fences readers and writers as
+`state_unavailable`. Reconciliation validates the entire lineage before any
+recovery write, reconstructs missing paths only from verified blobs, refuses
+changed materialized bytes, and re-establishes file/directory durability before
+exposure. Missing referenced blobs never become empty reads.
+
+Memory holds digest/path/request-position indexes, not historical manifest,
+bundle or outcome bytes. With N retained paths/requests/manifests/blobs, index
+space is O(N); payload working space is O(L), where L is the 16 MiB maximum
+local blob. Recovery decodes one bounded request/delta at a time and folds
+indexes in place. A delta is at most 64 KiB, and each request is independently
+bounded by the limits below. This is a bounded-payload algorithm, not constant
+memory independent of history. The 2,000-small-commit test measures additional
+live heap during Open against a 64 MiB workload ceiling; it is not a universal
+heap guarantee. Every API audit still reads/hashes retained authoritative bytes,
+so audit work grows with history; the change qualifies linear storage growth,
+not constant-time throughput or physical-filesystem durability.
+
+`CreateWithOptions` and `OpenWithOptions` accept `Options{MaxBytes: ...}`. Zero
+selects the default **1 GiB local logical regular-file byte budget**. Preflight
+charges all existing regular bytes, including retained fragments/unreferenced
+blobs, plus every new blob/materialized path, the new delta and a complete
+replacement `CURRENT`. Counting both old and staging `CURRENT` is conservative:
+success leaves one pointer-sized reserve. The check precedes intent, mkdir or
+any write; refusal is `capacity_exhausted` with no tree change. Exact retries
+need no additional capacity. Directory/inode metadata, filesystem allocation
+rounding and external copies/backups are outside this logical byte budget; real
+ENOSPC still fences as a durability failure. Opening with a smaller budget does
+not discard existing evidence or invalidate exact retries; it blocks new growth.
+
+The following are **local storage API limits, not protocol wire limits**:
+
+| Local field / operation | Limit |
+| --- | --- |
+| Principal, request ID, operation | Nonempty UTF-8, at most 255 bytes each |
+| Records in one request | 1–64 |
+| Result | At most 65,536 bytes |
+| Aggregate record bytes | At most 2 MiB |
+| Each query string | UTF-8, at most 8,192 bytes |
+| Record bytes | 65,536 for grant/enrollment; 8,192 for other compiled kinds |
+| Opaque journal/checkpoint bytes | Nonempty, at most 8,192 each |
+| Local serialized blob / delta | 16 MiB / 64 KiB |
+| Total retained regular bytes | Configurable; default 1 GiB, charged as above |
+
+`Preflight` additionally enforces the design's separate full received bundle
+2 MiB bound, J's 64 entries/two checkpoints/540,672 bytes, F's 64 publications/
+one checkpoint/532,480 bytes and 64 IDs/keys, per-proof-record 8,192-byte/depth-16
+bounds, and complete WS wrapper 8,192 bytes including LF. The caller supplies the
+entire received carrier. These budget/shape checks authenticate no proof or
+wrapper, implement no WS transport and never truncate a complete proof to fit.
 
 ## Tools
 
@@ -216,7 +272,7 @@ heavy-slot --label registry -- go test ./internal/intake ./internal/pins ./inter
 heavy-slot --label registry -- go vet ./internal/intake ./internal/pins ./internal/contracts
 heavy-slot --label registry -- gofmt -w internal/contracts/*.go internal/pins/*.go internal/intake/*.go
 heavy-slot --label registry -- go build ./internal/store
-heavy-slot --label registry -- go test ./internal/store
+heavy-slot --label registry -- go test ./internal/store -timeout=2h
 heavy-slot --label registry -- go vet ./internal/store
 heavy-slot --label registry -- gofmt -w internal/store/*.go
 ```
@@ -238,8 +294,12 @@ runtime dependency of the library packages.
 
 Storage tests use only disposable temporary directories. They cover conflict
 precedence, exact retries, unsafe paths, no-write preflight refusals, each checked
-I/O failure, partial writes, and crashes at every commit boundary, including a
-bounded directory-durability model. Package-private fault hooks are unavailable
+I/O failure, partial writes, bootstrap mkdir/anchor failures, first-commit boundaries and
+new type-directory barriers. The bounded power model tracks fsynced inode
+contents independently from parent-synced names, including lost parents. Size
+and memory tests use 1,000 retained 64 KiB bundles and 2,000 small commits. They
+perform real fsync and whole-history audits; the explicit storage-test timeout
+allows for this work on shared filesystems. Package-private fault hooks are unavailable
 to production callers. The power-loss model and local locks do not qualify a
 filesystem, witness, Git adapter, service startup or external publication. Build
 and vet produce no persistent output; place redirected test logs and coverage

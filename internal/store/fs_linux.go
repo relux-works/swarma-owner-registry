@@ -19,8 +19,10 @@ type hooks struct {
 	write         func(*os.File, []byte) (int, error)
 }
 type disk struct {
-	root  *os.File
-	hooks hooks
+	root       *os.File
+	hooks      hooks
+	totalBytes uint64
+	scanned    map[string]stamp
 }
 
 func (d *disk) before(op, p string) error {
@@ -103,7 +105,11 @@ func (d *disk) dir(p string) (*os.File, error) {
 	}
 	return os.NewFile(uintptr(fd), "store-directory"), nil
 }
-func (d *disk) read(p string) ([]byte, error) {
+func (d *disk) read(p string) ([]byte, error) { return d.readCap(p, MaxLocalFileBytes) }
+func (d *disk) readCap(p string, limit int) ([]byte, error) {
+	if limit < 0 || limit > MaxLocalFileBytes {
+		return nil, errors.New("invalid read limit")
+	}
 	if !cleanRelative(p) {
 		return nil, errors.New("invalid local path")
 	}
@@ -125,10 +131,17 @@ func (d *disk) read(p string) ([]byte, error) {
 	if !st.Mode().IsRegular() {
 		return nil, errors.New("special local file")
 	}
-	return io.ReadAll(f)
+	if st.Size() > int64(limit) {
+		return nil, errors.New("local file too large")
+	}
+	raw, e := io.ReadAll(io.LimitReader(f, int64(limit)+1))
+	if len(raw) > limit {
+		return nil, errors.New("local file too large")
+	}
+	return raw, e
 }
 func layoutDirs() []string {
-	out := []string{"records", "journal", "checkpoints", "transactions"}
+	out := []string{"records", "journal", "checkpoints", "transactions", "blobs"}
 	for _, v := range contractsTypes() {
 		out = append(out, "records/"+v)
 	}
@@ -143,7 +156,13 @@ func (d *disk) mkdir(p string) error {
 		return e
 	}
 	defer parent.Close()
+	if e = d.before("dir.mkdir", p); e != nil {
+		return e
+	}
 	if e = syscall.Mkdirat(int(parent.Fd()), filepath.Base(p), 0700); e != nil {
+		return e
+	}
+	if e = d.after("dir.mkdir", p); e != nil {
 		return e
 	}
 	return d.syncDir(filepath.Dir(p))
@@ -300,6 +319,8 @@ func (d *disk) atomic(p string, data []byte, stateID string, replace bool) error
 
 func (d *disk) scan() ([]string, error) {
 	var out []string
+	d.totalBytes = 0
+	d.scanned = map[string]stamp{}
 	var walk func(string) error
 	walk = func(p string) error {
 		f, e := d.dir(p)
@@ -323,6 +344,9 @@ func (d *disk) scan() ([]string, error) {
 				return errors.New("local link")
 			}
 			if entry.IsDir() {
+				if !allowedDirectory(path + "/") {
+					return errors.New("unknown directory")
+				}
 				out = append(out, path+"/")
 				if e = walk(path); e != nil {
 					return e
@@ -331,9 +355,12 @@ func (d *disk) scan() ([]string, error) {
 				if entry.Type()&os.ModeType != 0 {
 					return errors.New("special local file")
 				}
-				if _, e = d.read(path); e != nil {
+				st, e := d.stat(path)
+				if e != nil {
 					return e
 				}
+				d.scanned[path] = st
+				d.totalBytes += uint64(st.Size)
 				out = append(out, path)
 			}
 		}
@@ -344,4 +371,73 @@ func (d *disk) scan() ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// MaxLocalFileBytes bounds a local blob before decoding; it is not a wire cap.
+// Worst-case valid query escaping plus base64 payloads fit below this bound.
+const MaxLocalFileBytes = 16 * 1024 * 1024
+
+type stamp struct {
+	Dev, Ino     uint64
+	Size         int64
+	Mtime, Ctime syscall.Timespec
+}
+
+func (d *disk) stat(p string) (stamp, error) {
+	parent, e := d.dir(filepath.Dir(p))
+	if e != nil {
+		return stamp{}, e
+	}
+	defer parent.Close()
+	fd, e := syscall.Openat(int(parent.Fd()), filepath.Base(p), syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	if e != nil {
+		return stamp{}, e
+	}
+	defer syscall.Close(fd)
+	var st syscall.Stat_t
+	if e = syscall.Fstat(fd, &st); e != nil {
+		return stamp{}, e
+	}
+	if st.Mode&syscall.S_IFMT != syscall.S_IFREG || st.Size < 0 || st.Size > MaxLocalFileBytes {
+		return stamp{}, errors.New("unsafe local file")
+	}
+	return stamp{Dev: uint64(st.Dev), Ino: st.Ino, Size: st.Size, Mtime: st.Mtim, Ctime: st.Ctim}, nil
+}
+
+// Every audit re-reads and hashes authoritative bytes; metadata is not treated
+// as a content identity. Comparing the descriptor-independent stamp also detects
+// replacement/content writes observed during that bounded read.
+func (d *disk) verify(p, id string) error {
+	st, ok := d.scanned[p]
+	if !ok {
+		return errors.New("missing authoritative file")
+	}
+	b, e := d.read(p)
+	if e != nil || byteID(b) != id {
+		return errors.New("authoritative bytes unavailable")
+	}
+	after, e := d.stat(p)
+	if e != nil || after != st {
+		return errors.New("file changed during audit")
+	}
+	return nil
+}
+
+func (d *disk) ensureDir(p string) error {
+	f, e := d.dir(p)
+	if e == nil {
+		return f.Close()
+	}
+	if !errors.Is(e, os.ErrNotExist) {
+		return e
+	}
+	if !allowedDirectory(p + "/") {
+		return errors.New("unknown directory")
+	}
+	if parent := filepath.Dir(p); parent != "." {
+		if e = d.ensureDir(parent); e != nil {
+			return e
+		}
+	}
+	return d.mkdir(p)
 }

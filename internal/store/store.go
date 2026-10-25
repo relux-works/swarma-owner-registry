@@ -104,26 +104,49 @@ type Store struct {
 	stateID        string
 	pendingID      string
 	manifests      map[string]bool
-	manifestBytes  map[string][]byte
+	maxBytes       uint64
+	blobs          map[string]bool
 	fenced, closed bool
 }
+
+// Retained indexes contain digests and positions only, never historical payloads.
 type retained struct {
-	Request Request
-	Outcome Outcome
+	Request, Outcome string
+	Sequence         uint64
 }
 type image struct {
 	Sequence        uint64
 	Head, Watermark string
-	Files           map[string][]byte
+	Files           map[string]string
 	Requests        map[string]retained
 }
+
+// A state identity hashes this entire delta, including its predecessor identity.
+// Exact file/request/outcome bytes are bound through immutable blob digests.
 type manifest struct {
-	Base      string
-	Request   Request
-	Candidate image
+	Base            string
+	Sequence        uint64
+	Head, Watermark string
+	Files           map[string]string
+	Key             string
+	Retained        retained
 }
 
-func genesis() image { return image{Files: map[string][]byte{}, Requests: map[string]retained{}} }
+const DefaultMaxBytes uint64 = 1 << 30
+
+// Options is a local logical regular-file byte budget, not a wire limit.
+// Zero selects the default. Directory/inode metadata is not charged.
+type Options struct{ MaxBytes uint64 }
+
+func budget(o Options) uint64 {
+	if o.MaxBytes == 0 {
+		return DefaultMaxBytes
+	}
+	return o.MaxBytes
+}
+func byteID(b []byte) string { return fmt.Sprintf("sha256:%x", sha256.Sum256(b)) }
+
+func genesis() image { return image{Files: map[string]string{}, Requests: map[string]retained{}} }
 func canonical(v any) []byte {
 	b, e := json.Marshal(v)
 	if e != nil {
@@ -285,10 +308,10 @@ func validate(r Request) error {
 func candidate(base image, r Request) (image, Outcome, error) {
 	key := requestKey(r)
 	if prior, ok := base.Requests[key]; ok {
-		if !bytes.Equal(canonical(prior.Request), canonical(r)) {
+		if prior.Request != requestDigest(r) {
 			return image{}, Outcome{}, refuse(RequestConflict)
 		}
-		return image{}, clone(prior.Outcome), nil
+		return image{}, Outcome{Sequence: prior.Sequence, Head: r.Head, Watermark: r.Watermark, Result: append([]byte{}, r.Result...)}, nil
 	}
 	if r.ExpectedHead != base.Head {
 		return image{}, Outcome{}, refuse(HeadConflict)
@@ -302,59 +325,71 @@ func candidate(base image, r Request) (image, Outcome, error) {
 	}
 	for _, v := range r.Records {
 		for path, old := range base.Files {
-			if strings.HasPrefix(path, "records/") && strings.HasSuffix(path, "/"+v.ID+".json") && !bytes.Equal(old, v.Bytes) {
+			if strings.HasPrefix(path, "records/") && strings.HasSuffix(path, "/"+v.ID+".json") && old != byteID(v.Bytes) {
 				return image{}, Outcome{}, refuse(EnvelopeConflict)
 			}
 		}
 	}
-	next := clone(base)
+	next := genesis()
 	for _, v := range r.Records {
-		next.Files[recordPath(v)] = append([]byte{}, v.Bytes...)
+		next.Files[recordPath(v)] = byteID(v.Bytes)
 	}
-	next.Files[fmt.Sprintf("journal/%016d.json", seq)] = append([]byte{}, r.Journal...)
-	next.Files[fmt.Sprintf("checkpoints/%016d.json", seq)] = append([]byte{}, r.Checkpoint...)
+	next.Files[fmt.Sprintf("journal/%016d.json", seq)] = byteID(r.Journal)
+	next.Files[fmt.Sprintf("checkpoints/%016d.json", seq)] = byteID(r.Checkpoint)
 	next.Sequence, next.Head, next.Watermark = seq, r.Head, r.Watermark
 	out := Outcome{Sequence: seq, Head: r.Head, Watermark: r.Watermark, Result: append([]byte{}, r.Result...)}
-	next.Requests[key] = retained{Request: clone(r), Outcome: clone(out)}
+	next.Requests[key] = retained{Request: requestDigest(r), Outcome: byteID(canonical(outcomeRef(out))), Sequence: seq}
 	return next, out, nil
 }
 
 // Create is explicit bootstrap of an existing empty private directory. Open
 // never treats absent state as genesis. The caller owns bootstrap authorization.
-func Create(root string) (*Store, error) {
+func Create(root string) (*Store, error) { return CreateWithOptions(root, Options{}) }
+func CreateWithOptions(root string, options Options) (*Store, error) {
 	d, e := openDisk(root)
 	if e != nil {
 		return nil, refuse(StateUnavailable)
 	}
-	fail := func() (*Store, error) { d.close(); return nil, refuse(StateUnavailable) }
+	return createDisk(d, budget(options))
+}
+
+// The disk seam makes bootstrap boundaries observable without global hooks.
+func createDisk(d *disk, maxBytes uint64) (*Store, error) {
+	fail := func(e error) (*Store, error) { d.close(); return nil, e }
 	paths, e := d.scan()
 	if e != nil || len(paths) != 0 {
-		return fail()
-	}
-	for _, dir := range layoutDirs() {
-		if e = d.mkdir(dir); e != nil {
-			return fail()
-		}
+		return fail(refuse(StateUnavailable))
 	}
 	initial := genesis()
 	stateID := digest(initial)
+	if uint64(len(canonical(initial))+72) > maxBytes {
+		return fail(refuse(CapacityExhausted))
+	}
+	for _, dir := range []string{"records", "journal", "checkpoints", "transactions", "blobs"} {
+		if e = d.mkdir(dir); e != nil {
+			return fail(refuse(StateUnavailable))
+		}
+	}
 	if e = d.atomic("anchor.json", canonical(initial), stateID, false); e != nil {
-		return fail()
+		return fail(refuse(StateUnavailable))
 	}
 	if e = d.atomic("CURRENT", []byte(stateID+"\n"), stateID, true); e != nil {
-		return fail()
+		return fail(refuse(StateUnavailable))
 	}
-	return &Store{disk: d, active: initial, stateID: stateID, manifests: map[string]bool{}, manifestBytes: map[string][]byte{}}, nil
+	return &Store{disk: d, active: initial, stateID: stateID, manifests: map[string]bool{}, blobs: map[string]bool{}, maxBytes: maxBytes}, nil
 }
 
 // Open validates/reconciles only local evidence. Service startup still requires
 // independently qualified exclusion, continuity and witness barriers.
 func Open(root, expectedStateID string) (*Store, error) {
+	return OpenWithOptions(root, expectedStateID, Options{})
+}
+func OpenWithOptions(root, expectedStateID string, options Options) (*Store, error) {
 	d, e := openDisk(root)
 	if e != nil {
 		return nil, refuse(StateUnavailable)
 	}
-	s := &Store{disk: d, fenced: true}
+	s := &Store{disk: d, fenced: true, maxBytes: budget(options)}
 	if e = s.Reconcile(expectedStateID); e != nil {
 		d.close()
 		return nil, e
@@ -406,7 +441,11 @@ func (s *Store) Preview(input Request) (View, error) {
 	if next.Files == nil {
 		return View{StateID: s.stateID, Head: s.active.Head, Sequence: s.active.Sequence, Watermark: s.active.Watermark}, nil
 	}
-	return View{StateID: digest(next), Head: next.Head, Sequence: next.Sequence, Watermark: next.Watermark}, nil
+	m, blobs := delta(s.stateID, next, r)
+	if e = s.capacity(m, blobs); e != nil {
+		return View{}, e
+	}
+	return View{StateID: digest(m), Head: next.Head, Sequence: next.Sequence, Watermark: next.Watermark}, nil
 }
 
 func (s *Store) Commit(input Request) (Outcome, error) {
@@ -428,24 +467,36 @@ func (s *Store) Commit(input Request) (Outcome, error) {
 	if next.Files == nil {
 		return out, nil
 	} // exact retained outcome, no reservation
-	stateID := digest(next)
-	m := manifest{Base: s.stateID, Request: r, Candidate: next}
+	m, blobs := delta(s.stateID, next, r)
+	if e = s.capacity(m, blobs); e != nil {
+		return Outcome{}, e
+	}
+	stateID := digest(m)
 	// Fence before the first uncertain operation, including a crash/panic. Only
 	// the final checked namespace sync below can reopen local readers/acceptance.
 	s.fenced = true
 	s.pendingID = stateID
+	// The manifest is durable first. Missing blobs after a crash fence; complete
+	// surviving blobs permit exact reconstruction of materialized paths.
 	if e = s.disk.atomic("transactions/"+stateID+".json", canonical(m), stateID, false); e != nil {
 		return Outcome{}, refuse(StateUnavailable)
 	}
-	if e = s.materialize(next, stateID); e != nil {
+	for _, id := range sortedKeys(blobs) {
+		if e = s.disk.atomic("blobs/"+id+".blob", blobs[id], stateID, false); e != nil {
+			return Outcome{}, refuse(StateUnavailable)
+		}
+	}
+	if e = s.materialize(m.Files, stateID); e != nil {
 		return Outcome{}, refuse(StateUnavailable)
 	}
 	if e = s.disk.atomic("CURRENT", []byte(stateID+"\n"), stateID, true); e != nil {
 		return Outcome{}, refuse(StateUnavailable)
 	}
-	s.active, s.stateID = next, stateID
+	s.active, s.stateID = fold(s.active, next), stateID
 	s.manifests[stateID] = true
-	s.manifestBytes[stateID] = canonical(m)
+	for id := range blobs {
+		s.blobs[id] = true
+	}
 	s.pendingID = ""
 	s.fenced = false
 	return clone(out), nil
@@ -474,5 +525,9 @@ func (s *Store) ReadRecord(kind, id string) ([]byte, error) {
 	if !ok {
 		return nil, refuse(NotFound)
 	}
-	return append([]byte{}, v...), nil
+	raw, e := s.disk.read("blobs/" + v + ".blob")
+	if e != nil || byteID(raw) != v {
+		return nil, s.unavailable()
+	}
+	return raw, nil
 }
