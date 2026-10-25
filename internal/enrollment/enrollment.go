@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"path"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 
@@ -58,6 +59,12 @@ func (p Projection) Clone() Projection {
 		}
 	}
 	return out
+}
+
+// sortEntries uses the public Loader's unsigned-byte Git-path ordering. Call it
+// only on owned slices; it preserves exact paths, kinds, bytes and duplicates.
+func sortEntries(entries []registry.Entry) {
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 }
 
 // State is protected retained evidence. Exports includes every previous exact
@@ -198,7 +205,11 @@ func New(t Trust) (*Adapter, error) {
 			return nil, unavailable()
 		}
 	}
-	return &Adapter{policy: p, verifier: t.Verifier, transaction: t.Transaction, state: t.Retained.Clone(), firstUse: t.FirstUse, reconciled: t.Reconciled}, nil
+	retained := t.Retained.Clone()
+	for i := range retained.Exports {
+		sortEntries(retained.Exports[i].Entries)
+	}
+	return &Adapter{policy: p, verifier: t.Verifier, transaction: t.Transaction, state: retained, firstUse: t.FirstUse, reconciled: t.Reconciled}, nil
 }
 
 func (a *Adapter) Fenced() bool {
@@ -245,6 +256,7 @@ func (a *Adapter) Load(input Projection) (*registry.Snapshot, error) {
 		return fail(unavailable())
 	}
 	p := input.Clone()
+	sortEntries(p.Entries)
 	bridge := &storeBridge{adapter: a, projection: p}
 	loader := registry.Loader{Policy: a.policy, Verifier: a.verifier, Store: bridge}
 	snapshot, _, err := loader.Load(registry.Input{Revision: p.Revision, Entries: p.Entries, Retained: a.state.HighWater.Clone(), FirstUse: a.firstUse, Reconciled: a.reconciled})
