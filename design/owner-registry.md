@@ -28,7 +28,7 @@ Immutable inputs read for this design:
 | K | [Key service](https://github.com/relux-works/swarma-keymaker/blob/0ae0c4e93c3fae9db2bcadcfb5eeafbdcf0668c0/spec/keymaker.md), §§4.3, 5, 8–9: custody, pins, enrollment and purpose 5. |
 | W | [Witness consumer](https://github.com/relux-works/swarma-keymaker/blob/5eb89870d25cd9c4dd9e71180d9449f18fba206f/spec/keymaker-witness.md), §§3.3–6, 8: operations, intent ordering, recovery and WC1. |
 | B | [Broker](https://github.com/relux-works/swarma-credential-broker/blob/f2c01f52477b5885aefd5b6bd04d09a6a22813b2/spec/broker.md), §§6.4–6.6: local authority and the registry boundary. |
-| T | [Time policy](https://github.com/relux-works/swarma-credential-broker/blob/a1c69eb9ed6576d3b060dfb3e697de2fd2180f0d/docs/time-policy.md) and [qualified consumer contract](https://github.com/relux-works/swarma-credential-broker/blob/a1c69eb9ed6576d3b060dfb3e697de2fd2180f0d/docs/time-contract.md), `swarma-credential-broker/docs/time-contract.md` at exact revision `a1c69eb9ed6576d3b060dfb3e697de2fd2180f0d` (`a1c69eb`). Merged specification; receipt, independent continuity backend and bounded consumption implementation remain activation gates. |
+| T | [Time policy](https://github.com/relux-works/swarma-credential-broker/blob/7294b7aea68a8e0757437075efa3a6e318a18e51/docs/time-policy.md), [qualified consumer contract](https://github.com/relux-works/swarma-credential-broker/blob/7294b7aea68a8e0757437075efa3a6e318a18e51/docs/time-contract.md), [handoff contract](https://github.com/relux-works/swarma-credential-broker/blob/7294b7aea68a8e0757437075efa3a6e318a18e51/docs/time-handoff.md) and [window-profile schema](https://github.com/relux-works/swarma-credential-broker/blob/7294b7aea68a8e0757437075efa3a6e318a18e51/docs/time-window-profile.md), exact revision `7294b7aea68a8e0757437075efa3a6e318a18e51` (`7294b7a`). Published documentation contracts; receipt authentication, independent continuity and bounded consumption implementation remain activation gates. |
 | R | [Registrar](https://github.com/relux-works/swarma-registrar/blob/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/spec/registrar.md), §§4.2–4.5 and Appendix C.3. |
 | P | Public [ccj](https://github.com/relux-works/swarma-registrar/tree/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/ccj), [enrollment](https://github.com/relux-works/swarma-registrar/tree/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/enrollment) and [registry](https://github.com/relux-works/swarma-registrar/tree/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/registry) packages. |
 | WS | [Witness server proposal](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md), PR #20: exact server/wrapper, challenged reads, strict custodian and limits; spec only, not deployed or qualified. |
@@ -757,6 +757,12 @@ authority, including on unchanged-head fresh reads. B avoids heartbeat appends,
 not that dependency. Registrar WC2 transport acceptance remains pending its
 own decision; this registry adapter does not depend on its outcome.
 
+WC1 S3 v2 supplies no read-completion time fact: `WitnessReadAt` must come from
+our protected adapter's qualified read-completion measurement of the exact
+authenticated complete read, never TLS time, checkpoint_time, server audit times,
+a retry receipt or an unrelated clock sample; this remains an open slice 5b
+requirement.
+
 WS's eight-member projection is exactly `{registry_id,owner,registry_seq,
 registry_head,checkpoint_id,checkpoint_time,candidate_digest,previous_checkpoint_id}`.
 Independently validate originals, scope, signatures, full ancestry, challenged
@@ -965,8 +971,21 @@ is selected for handoff authentication. Existing signed wire formats stay closed
 All current-code citations in §9.1 refer to **8b14f65d504b35d10595d0b7c4d79d5c78b0e63e**;
 line numbers are at that revision, not at this document's eventual merge head.
 Identifiers and fields introduced below are proposed consumer requirements,
-not published broker API members. The broker profile schema/template is pending;
-its eventual mapping requires joint review before codec or adapter work.
+not runtime broker API members. T's published documentation schema at `7294b7a`
+maps to the native C/V/F requirements below; it adds no wire fields or activation.
+Native stricter requirements remain authoritative: the retained pre-lock c is
+mandatory, exact H remains a stored QTUse commitment, and the original operation
+deadline remains at most five seconds or stricter.
+
+| Schema group at T | C: candidate commit | V: resolved visibility | F: freshness Publish / Retry |
+| --- | --- | --- | --- |
+| 1. Identity and dependency graph | §9.1.3 exact request, content/base/checkpoint/snapshot/head and C slot; §9.1.4 frozen content/completion split. | Same original operation/content plus authenticated resolution, pointer predecessor and distinct V slot (§9.1.3). | Protected schedule/request and action, frozen bytes/anchor/history, independent logical slot and publication_seq (§9.1.3). All windows retain native codecs and non-circular bindings. |
+| 2. Time meanings | §9.1.1 original b/D and s/p/m; native required c maps only to p. | Same original D after resolution; new s/p/m, not C's captures (§9.1.1). | Publish/revalidate retain their original D and action-specific allowances (§9.1.1). Native c cannot use the schema's optional p=s fallback. |
+| 3. Uncertainty coverage | §9.1 and §9.1.1 preserve raw/coarse predicates and original C reserve. | New V settlement/reserve within the same original D, without spending C's reserve again (§9.1.1). | Separate publish/revalidate reserve and native watermark/J projection (§9.1.1); no renewal or second use of a spent interval. |
+| 4. Preparation authenticity | §9.1.2 staged signed content and §9.1.7 protected originals/witness before locks. | New preparation after matching resolution, with exact immutable content and live custody (§9.1.2, §9.1.7). | Frozen signed publication before final locks and complete protected read evidence (§9.1.2, §9.1.7). All require bounded owned originals; hashes alone confer no authority. |
+| 5. Final admission, use and recovery | §9.1.2 exact predecessor/unused v admission before m; atomic C act/use (§9.1.4). | Same order against C completion/resolution and prior pointer, with separate V act/use (§9.1.2–§9.1.4). | Same order against exact StateID and resolved head; Retry changes floors/use, not publication position (§9.1.2–§9.1.5). Native QTUse requires stored H, exact CAS and independent recovery for all windows. |
+| 6. Enforcement and qualification per platform | §9.1.1–§9.1.2 C workload/residual bound; §9.1.6 Linux/macOS full durable endpoint. | V marker/pointer and use durability, independent visibility authority and native parity (§9.1.2, §9.1.4, §9.1.6). | Publish/Retry persistence endpoints and their distinct workloads on both platforms (§9.1.1–§9.1.2, §9.1.6). All stay handoff_unqualified; stop remains independent. |
+| 7. Paired controls and composition | §9.1.8 admission-order, race, duplicate, frozen-intent and crash pairs; §9.1.1 shared original D. | New handoff/read/use after C and resolution, with no shared reserve or checked candidate across lock release (§9.1.1–§9.1.2). | §9.1.5 retransmission/Retry distinction and §9.1.8 paired controls; no extra position or use grant from recovery. Every control remains PENDING. |
 
 #### 9.1.1 Admission, original time and per-window budgets
 
@@ -987,11 +1006,14 @@ select `CLOCK_BOOTTIME`, which includes suspend, as documented by
 The verifier receives the captured integer; it has no clock, callback, provider,
 RPC, descriptor, randomness, lazy loading, I/O or mutation. Preparation captures
 are outside this one final read. Define `s` as the original bound observation in
-that clock domain, `c` as the last qualified pre-lock capture, and `m` as the
-single final read. Check same boot/domain and, in checked integer nanoseconds:
+that clock domain, `p` as the last qualified pre-lock capture, and `m` as the
+sole final read, following T's distinct meanings. Our retained native `c` maps
+exactly to `p`, never to `s` or `m`; c stays required even though the shared
+schema permits p to be absent and then use s. That fallback is not permitted by
+this native profile. Check same boot/domain and, in checked integer nanoseconds:
 
 ```
-m >= c >= s
+m >= p >= s
 f > 0; epsilon >= 0; T > 0
 m - s + f + epsilon <= T
 m + f + epsilon < D
@@ -1042,6 +1064,14 @@ fence and publication quiescence may span remote phases (§6.2); final mutexes
 must not. The dependency graph must not make the outer exclusion a time/RPC
 wait on the emergency-stop path. Do not reacquire a public Store method while
 already holding its non-reentrant mutex.
+
+For **each of C, V and F**, initial persistence/use admission and selection of
+the exact protected predecessor revision and unused use revision `v`, including
+the current head/authority generation, occur under all final locks **before m**.
+After m and the pure check, the exact-revision CAS
+`unused(v) -> burned(v+1,H,act,outcome)` follows in the same atomic commit as
+the act (§9.1.4); initial admission after m is forbidden even if nonwaiting and
+budgeted in f. No checked candidate survives release of the final locks.
 
 | Window | Exact current anchors and proposed final held/released state | Durable endpoint and release |
 | --- | --- | --- |
@@ -1267,12 +1297,15 @@ stay outside final locks. Returned bounded owned evidence must remain valid unde
 the installed invalidation/fencing model. Neither interface replaces the
 registry's independent use/publication rollback protection.
 
-The template must accommodate the native identity groups in §9.1.3, phase/action,
+The published template maps the native identity groups in §9.1.3, phase/action,
 logical sequence and exact predecessor revisions, original boot/domain/start/D
-and UTC/mapping identity, s/c/m admission provenance, T/f/epsilon/reserve and
-qualification identity, exact receipt/closure/validator references, authenticated
-anchor, private run and H. m is the local admission input, not a receipt-supplied
-freshness assertion. Preserve current receipt and closed consumer wire codecs;
+and UTC/mapping identity, distinct s/p/m admission provenance with native c=p,
+T/f/epsilon/reserve and qualification identity, exact receipt/closure/validator
+references, authenticated
+anchor, private run and native-required stored H. The sole m is captured locally
+after admission, not a receipt-supplied assertion or future value required in
+the preparation commitment. Preserve current receipt and closed consumer wire
+codecs;
 resolve any unsupported field or platform domain with the broker owner rather
 than invent an extension. Production reader, witness, preparation and admission
 implementations remain inactive and return typed activation refusals.
@@ -1289,6 +1322,7 @@ against the selected actual mechanism in isolated fixtures.
 | Planned control pair | Negative witness | Valid control | Status |
 | --- | --- | --- | --- |
 | `TestWindowStaleCapture` | Same old c, but delay final-lock admission beyond original D; actual fresh m refuses deadline. A checker using only c misses it. | Same inputs, timely actual m and qualified residual endpoint. | PENDING |
+| `TestWindowUseAdmissionBeforeCapture` | Capture m before initial persistence/use admission or before selecting the exact predecessor and unused v; refuse window entry with no burn/act, even for a nonwaiting later admission budgeted in f. | Under every final lock, admit the exact predecessor and unused v before the sole m, then check and atomically CAS act/use. Moving admission/selection after m must fail the order assertion. | PENDING |
 | `TestWindowDoubleCheck` | Two checks from one unused predecessor both produce candidates; a second durable consume must fail revision/replay with one act total. | One check/CAS against unused v commits act/use once. | PENDING |
 | `TestWindowTimelyAndLateAct` | Pause immediately after m through D or suspend across it; the actual selected primitive must prevent late durable act. A late reply suppressed after an already late act fails this control. | Same actual primitive commits complete act/use before D. Unknown f makes both unqualified. | PENDING |
 | `TestWindowDeadlineEquality` | `m+f+epsilon == D` refuses deadline; elapsed/reserve equality alone cannot override it. | Same workload with strict endpoint `<D` and elapsed `<=T`. | PENDING |
@@ -1352,8 +1386,8 @@ No production activation follows from mocks or two implementations agreeing.
 | 5. Journal/witness proof | `TestWriterCannotAppendWitness`, `TestStaleChallengeRefused`, `TestUnresolvedIntentFences`, `TestRestoredCloneCannotServe`, `TestSameHeadCheckpointForkRefused`, `TestAdvancingAnchorMissingRefused`, `TestAnchorTimeRegressionRefused`, `TestCheckpointTimeRegressionRefused`, `TestEightFieldProjectionRefused`, `TestPublicationLinkLossRefused`, `TestIntentOnlyPublicationRefused`, `TestDelayedProofExpiredRefused` | `TestExactIntentCommitResolution`, `TestLostResolutionReceiptFreshHead`, `TestAnchoredSuffixAccepted`, `TestValidatedProjectionReduced`, `TestPublicationBundleVerifiedAtIssue`; real ACL/crash/custodian/exclusion qualification, archive is not a current receipt. |
 | 6. Base snapshots/time/capacity | `TestHeadChangeStaleSnapshotRefused`, `TestHeadChangeOldSnapshotRefRefused`, `TestHeadChangeMissingRecordRefused`, `TestHeadChangeMissingReissueRefused`, `TestHeadChangeMissingPriorCheckpointRefused`, `TestHeadChangeWrongPriorCheckpointRefused`, `TestStaleSnapshotRefused`, `TestEqualIssueTimeDifferentBytesRefused`, `TestCumulativeRemovalRefused`, `TestGapRefused`, `TestSplitHeadSignalsAndRefuses`, `TestSnapshotCapacitySignalsWithoutDrop`, `TestTimeLossNoPublication` | `TestHeadChangeReissueAccepted` (P-JRN-publish-reissue at F), `TestFreshCompleteSnapshotAccepted`, `TestConsumerAgeBoundary`, `TestMatchingGossipHeadAccepted`; identical cumulative set reissued at greater issued_at, same-transaction add/revocation/1 entry and new checkpoint snapshot reference; issuer profiles, byte/count limits and provider qualification. |
 | 6a. Interval-aware time adapter before any activation | `TestPointTimeViewCannotAccept` (`O=100`, `δ=1`, `A=101` refuses because `U=A`), `TestConsumedHighWaterNotPriorWatermark`, `TestCoarseRoundingNeverAccepts` | `TestIntervalReceiptAccepted`; complete bound receipt with `L`, `U`, exclusive `A`, boot and sample id, native operation/challenge binding, distinct provider history and consumer watermark, conservative rounding with original and converted predicates (§9). This slice implements the pure interval projection for slices 6/7. The timeconf adapter, complete receipt validation and operation/challenge binding remain planned qualification gates. |
-| 6b. QT-2c schemas/use and frozen-content decision (PENDING) | `TestWindowDoubleCheck`, `TestWindowBurnedDifferentH`, `TestWindowUseMetadataMissing`, `TestWindowPostIntentInventoryChanged`, `TestWindowUseRestoreDespiteProviderW` | Exact unused-revision composite commit and independently reconciled content/completion/use history (§9.1.4, §9.1.8); Q18 owner approval and broker template first. No code/codec/adapter activation. |
-| 6c. C/V/F final-window integration (PENDING) | `TestWindowLockedHeadChanged`, `TestWindowLostCommitAck`, `TestWindowFreshnessRevalidation`, `TestWindowOriginalOrBudgetSubstitution` | Exact matching locked candidate, recovered original outcome, fresh Retry floors without another publication position; §9.1.2–§9.1.5 paired controls. All named current locks plus approved common exclusions; staged signing/reader/witness work outside them. |
+| 6b. QT-2c schemas/use and frozen-content decision (PENDING) | `TestWindowDoubleCheck`, `TestWindowBurnedDifferentH`, `TestWindowUseMetadataMissing`, `TestWindowPostIntentInventoryChanged`, `TestWindowUseRestoreDespiteProviderW` | Exact unused-revision composite commit and independently reconciled content/completion/use history (§9.1.4, §9.1.8); Q18 owner approval and native mapping to T's published template first. No code/codec/adapter activation. |
+| 6c. C/V/F final-window integration (PENDING) | `TestWindowUseAdmissionBeforeCapture`, `TestWindowLockedHeadChanged`, `TestWindowLostCommitAck`, `TestWindowFreshnessRevalidation`, `TestWindowOriginalOrBudgetSubstitution` | Exact matching locked candidate, recovered original outcome, fresh Retry floors without another publication position; §9.1.2–§9.1.5 paired controls. All named current locks plus approved common exclusions; staged signing/reader/witness work outside them. |
 | 6d. Linux and macOS durable timing qualification (PENDING) | `TestWindowStaleCapture`, `TestWindowTimelyAndLateAct`, `TestWindowDeadlineEquality` | Actual on-time durable act/use with one native suspend-aware admission read and qualified f for each window/OS, plus applied narrowing controls (§9.1.8). Synthetic arithmetic alone cannot close Q19/Q20 or handoff_unqualified. |
 | 7. S4 publisher/currentness after re-pin | `TestFreshnessMissingRefused`, `TestFreshnessStaleRefused`, `TestFreshnessWrongRootRefused`, `TestFreshnessWrongSnapshotRefused`, `TestFreshnessWrongHeadRefused`, `TestFreshnessSameSeqDifferentBindingRefused`, `TestFreshnessBackwardSeqRefused`, `TestFreshnessBackwardTimeRefused`, `TestFreshnessPredecessorMissingRefused`, `TestFreshnessHeadRaceRefused`, `TestFreshnessUnresolvedIntentRefused`, `TestSlowWitnessClosesFreshness`, `TestFreshnessHistoryOmissionRefused`, `TestRestoredFreshnessStateFences`, `TestOldS3RejectsAgedBase`, `TestFreshnessCannotReviveAuthority` | `TestFreshnessKeepsJournalHead`, `TestRealChangeUsesWitnessTransaction`, `TestAgedBaseAcceptedByVerifyFreshness`, `TestFreshnessAtomicRetry`; identical base bytes and unchanged registry/witness positions on healthy freshness; exact effects and boundaries verified, never a global old-verifier waiver. |
 | 7a. S5 receipt composition before K3/D12 | `TestReceiptWrongBindingRefused`, `TestReceiptAtExpiryRefused`, `TestReceiptExtensionRefused`, `TestReceiptAfterRestartRefused`, `TestNonFreshnessReceiptIssuerRefused`, `TestLegacyOldBaseCompositionRefused` | `TestFreshnessReceiptCompositionAccepted`, `TestCurrentSnapshotLegacyCompositionAccepted`; merged S5 producers return `Result.FreshnessReceipt`, used via Context after admitted-plan persistence; exclusive fixed expiry, R1–R3 and origin-only audit; row 1b re-pin and adapter qualification remain gates. |
