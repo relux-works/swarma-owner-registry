@@ -218,8 +218,10 @@ func (r *Registry) accept(kind string, raw []byte, in RegistryCurrent) (*Accepte
 
 // RegistryBoundary runs its callback once under the caller's serialized final
 // exclusion, with freshly collected current facts, and holds that exclusion
-// through callback return (including the effect). It must propagate refusal and
-// must not perform an effect itself. No witness/clock collection is implemented.
+// through callback return (including the effect). Apply enforces one-shot use,
+// retires the callback on boundary return and preserves its observed error even
+// if the wrapper suppresses it. The boundary must not perform an effect itself.
+// No witness/clock collection or external exclusion is implemented here.
 type RegistryBoundary func(check func(RegistryCurrent) error) error
 
 // RegistryEffect is the caller's effect hook, invoked only after the repeated
@@ -230,18 +232,74 @@ type RegistryEffect func(*Accepted) error
 // Apply re-verifies the exact candidate at the serialized effect boundary. Even
 // a fabricated/mutated candidate has no authority without this complete check.
 // Snapshot replacement/full F cannot interleave between this check and effect.
-func (r *Registry) Apply(candidate *Accepted, boundary RegistryBoundary, effect RegistryEffect) error {
+// A returning boundary with an unfinished callback refuses; Apply waits for that
+// callback to retire before returning. An effect already dispatched cannot be
+// undone. The observed admission/effect error takes precedence over wrapper
+// errors; otherwise wrapper errors and lifecycle refusals remain failures.
+func (r *Registry) Apply(candidate *Accepted, boundary RegistryBoundary, effect RegistryEffect) (err error) {
 	if candidate == nil || boundary == nil || effect == nil {
 		return refuse(string(RequestInvalid))
 	}
+	if len(candidate.Bytes) > MaxIdentityBytes {
+		return refuse(string(RequestTooLarge))
+	}
 	kind, raw := candidate.Type, bytes.Clone(candidate.Bytes)
-	return boundary(func(current RegistryCurrent) error {
-		r.mu.RLock()
-		defer r.mu.RUnlock()
-		accepted, err := r.accept(kind, raw, current)
-		if err != nil {
-			return err
+	var callbackMu sync.Mutex
+	open, invoked, completed, repeated := true, false, false, false
+	var observed error
+	finished := make(chan struct{})
+	defer func() {
+		callbackMu.Lock()
+		open = false
+		inFlight := invoked && !completed
+		invalid := !invoked || repeated || inFlight
+		callbackMu.Unlock()
+		if inFlight {
+			<-finished
 		}
-		return effect(accepted)
+		callbackMu.Lock()
+		defer callbackMu.Unlock()
+		if observed != nil {
+			err = observed
+		} else if err == nil && invalid {
+			err = refuse(string(RequestInvalid))
+		}
+	}()
+	return boundary(func(current RegistryCurrent) (checked error) {
+		callbackMu.Lock()
+		if !open || invoked {
+			if open {
+				repeated = true
+			}
+			callbackMu.Unlock()
+			return refuse(string(RequestInvalid))
+		}
+		invoked = true
+		callbackMu.Unlock()
+		// Default to refusal if the wrapper recovers a callback panic. Completion
+		// must still release a retiring Apply, without recording a false success.
+		checked = refuse(string(RequestInvalid))
+		defer func() {
+			callbackMu.Lock()
+			observed, completed = checked, true
+			close(finished)
+			callbackMu.Unlock()
+		}()
+		checked = func() error {
+			r.mu.RLock()
+			defer r.mu.RUnlock()
+			accepted, e := r.accept(kind, raw, current)
+			if e != nil {
+				return e
+			}
+			callbackMu.Lock()
+			active := open
+			callbackMu.Unlock()
+			if !active {
+				return refuse(string(RequestInvalid))
+			}
+			return effect(accepted)
+		}()
+		return checked
 	})
 }

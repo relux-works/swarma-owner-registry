@@ -644,13 +644,21 @@ legacy routing and external-root age checks remain unchanged.
 An early `Accepted` is only a candidate. `Registry.Apply(candidate, boundary,
 effect)` repeats full admission of its exact bytes under the caller's typed
 `RegistryBoundary`, which supplies freshly collected facts and holds final
-exclusion through the callback, including the `RegistryEffect`. On refusal the
-effect hook is never invoked; effect errors propagate unchanged without retry.
+exclusion through the callback, including the `RegistryEffect`. On admission
+refusal the effect hook is never invoked; effect errors propagate unchanged without retry.
 The adapter also excludes snapshot/proof updates between recheck and effect;
-the effect must not re-enter methods on that same Registry. The caller runs the
-boundary callback exactly once, propagates its error and owns actual effects,
-locking, witness authentication and durable storage. This API implements none
-of those services, the scheduler or pending external-root freshness formats.
+the effect must not re-enter methods on that same Registry. `Apply` rejects
+oversized candidates before copying bytes or entering the boundary. It owns
+the callback's one-shot lifetime: repeated, concurrent and retired invocations
+refuse `request_invalid`, and a boundary cannot report success without a
+completed check. Observed admission/effect errors survive wrapper suppression
+and take precedence over wrapper errors. If the boundary returns with a callback
+still running, `Apply` retires further calls, waits for that callback and refuses;
+an already dispatched effect cannot be undone. A saved callback cannot dispatch
+after `Apply` returns. The caller still holds actual external exclusion through
+callback completion and owns effects, clock/witness authentication and durable
+storage. This API implements none of those services, the scheduler or pending
+external-root freshness formats.
 
 ## Tools
 
