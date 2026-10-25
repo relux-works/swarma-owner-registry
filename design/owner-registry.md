@@ -915,6 +915,14 @@ receive a late V success; unknown outcomes stay fenced for exact recovery
 WS:spec/witness-service.md:239–243,504,591–593;
 WC:spec/policy-v1.md:100–106; WC:UNRESOLVED_QUESTIONS.md:27–28).
 
+Under WC1 G18, the owner decided (2026-10-25) that after a pause, network
+partition or revocation an old writer, bridge or publisher instance or clone
+cannot write, sign or release anything; heartbeat, flock and CAS are not fences,
+including for §7 and §9.1.5
+([existing exclusion:918–939](https://github.com/relux-works/swarma-owner-registry/blob/e2b06e6b0d08a50b68dde8c015e6e6a5bbdbb208/design/owner-registry.md#L918-L939),
+[restore/use:1406–1413](https://github.com/relux-works/swarma-owner-registry/blob/e2b06e6b0d08a50b68dde8c015e6e6a5bbdbb208/design/owner-registry.md#L1406-L1413),
+[WC1 G18:26](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L26)).
+
 Keep sole-writer serialization, publication quiescence and old-instance exclusion
 across the intent/commit/resolution sequence, but perform qualified-time collection
 and witness/custodian RPCs outside final store, journal and publication locks;
@@ -948,6 +956,11 @@ exact-candidate recovery, never automatic cancellation or silent downgrade
 (OR:design/owner-registry.md:816–822;
 WS:spec/witness-service.md:334–337,369–405,506–514;
 WC:UNRESOLVED_QUESTIONS.md:27,38).
+
+For G14/G15, the owner decided (2026-10-25) that archive and audit custody are
+separate from the record custodian
+([existing archive scope:952–968](https://github.com/relux-works/swarma-owner-registry/blob/e2b06e6b0d08a50b68dde8c015e6e6a5bbdbb208/design/owner-registry.md#L952-L968),
+[WC1 G14/G15:22–23](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L22-L23)).
 
 **Proposed archive boundary; no implementation or activation.** WC1 archive
 retention covers WC1 records, controls, original receipts and audit state only.
@@ -1005,6 +1018,11 @@ Missing files, empty stream, lower head,
 broken chain or pending intent fences. A restored lineage never becomes bootstrap.
 Initial bootstrap requires explicit protected owner authorization and a pinned
 initial state; no automatic “first use” from absent receipts or counters.
+
+Under WC1 G19, the owner decided (2026-10-25) on evidence-bound recovery only,
+with old instances fenced; on ambiguity, hold and never recreate
+([existing recovery:999–1019](https://github.com/relux-works/swarma-owner-registry/blob/e2b06e6b0d08a50b68dde8c015e6e6a5bbdbb208/design/owner-registry.md#L999-L1019),
+[WC1 G19:27](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L27)).
 
 Recover an unresolved intent only with old instances excluded and independently
 approved exact candidate bytes/history. A digest cannot reconstruct missing bytes.
@@ -1558,10 +1576,10 @@ recommendations without reopening accepted S4 decisions. Activation is separate.
 | Q7: revocation completion | Decided, 2026-10-24, content review, per owner decision: consumer acknowledgement with explicit consumer sets and durable barriers, or proven expiry of all prior authority; critical actions require a final online check. An intake acknowledgement is never completion. Landed B §6.5 still preserves broker v0 authority/restore fences until migration. Publication receipt/freshness is not completion. |
 | Q8: capacity | Decided, 2026-10-24, content review D36: pages under one complete signed head; Merkle/narrower-domain alternatives deferred. Wire/completeness/retention qualification remains future work; current count AND byte refusal, fence, retention and operator signal stay mandatory. |
 | Q9: unchanged refresh | Decided, 2026-10-24, content review D38=B: 20-second separate freshness publications; no unchanged journal/checkpoint/witness/custodian append, per-entry checkpoint for real changes. S4 now supplies the exact profile/currentness APIs (F §2.9, D38–D41); code re-pin and consumer qualification remain gated. No owner-root-change op; D31 recovery remains separate. |
-| Q10: witness coordination / WC1 G17 | WS server is selected; independent witness-side bridge, exact eight-to-six adapter and mandatory advancing anchor, content review decision, 2026-10-24. One shared owner decision selects the off-node custodian provider, failure domain, exact-tuple/fresh-read protocol, continuity/recovery and strict worst-case SLA; bridge/candidate/exclusion implementation remains unqualified. No on-node, periodic-only or absent-provider fallback. Q18 remains a separate registry completion/visibility/use-protection decision; Registrar WC2 stays separate (OR:design/owner-registry.md:1360,1368; WS:spec/witness-service.md:483–523; WC:UNRESOLVED_QUESTIONS.md:25–28,33). |
+| Q10: witness coordination / WC1 G17 | Decided rule: the owner decided (2026-10-25) on one synchronous independent custodian serving both specifications, with exact predecessor confirmation and fresh reads within the operation budget; no periodic, local or absent-provider fallback. Provider not yet selected; provider/SLA, typed protocol and qualification remain open, and the gate stays closed. The selected WS stream, independent bridge, exact eight-to-six adapter and advancing anchor remain; bridge/candidate/exclusion implementation is unqualified. Q18 remains a separate open registry completion/visibility/use-protection decision; Registrar WC2 stays separate ([existing Q10:1561](https://github.com/relux-works/swarma-owner-registry/blob/e2b06e6b0d08a50b68dde8c015e6e6a5bbdbb208/design/owner-registry.md#L1561), [WC1 G17:25](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L25)). |
 | Q11: time activation | Decided, 2026-10-24, content review: durable watermark, zero backward tolerance and explicit recovery. Hold continuity and dedicated-service authdata remain qualification gates; missing independent history fences. |
 | Q12: complete publication/restore | Decided, 2026-10-24, content review: complete chained freshness history and off-node heads retained before use, with §5.2 atomic local publication and fail-closed restore; S4 supplies the wire/anchor; independent storage and complete-history integration remain unqualified. Historical re-verification needs a separate future path; gossip alone cannot prove absent hidden publications. Co-location/partition and no pre-publication deadline remain explicit. |
-| Q13: witness metadata disclosure | Open with the owner: approve what witness/custodian metadata may be disclosed and to which read principals before public distribution. Recommend minimal authenticated disclosure; this design makes no provider or disclosure choice. |
+| Q13: witness metadata disclosure / WC1 G07 | Decided rule: the owner decided (2026-10-25) on closed-by-default disclosure of witness and custodian metadata only to an explicitly approved circle of readers; otherwise isolation applies, without filtering the signed chain. The approved reader set or isolation design, implementation and qualification remain open; the gate stays closed ([existing Q13:1564](https://github.com/relux-works/swarma-owner-registry/blob/e2b06e6b0d08a50b68dde8c015e6e6a5bbdbb208/design/owner-registry.md#L1564), [WC1 G07:15](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L15)). |
 | Q14: D39 prior records | Decided, recorded 2026-10-25; F §§2.7, 6 and D39. Every advancing proof supplies both prior entry anchor and exact prior checkpoint via IDJournal, J5a then updated J6; no extra projection timestamp. |
 | Q15: D40 state and bounds | Decided, recorded 2026-10-25; F §§2.9, 6–7 and D40. Explicit authorized publication genesis, exact FreshnessAnchor and WitnessReadAt, independent 64-publication/532,480-byte bounds; durable state before use. |
 | Q16: D41 recovery/composition | Decided, 2026-10-25: S5 merged at `5f4e7435d75697385ff6ce15a7501ac6f31c8ea5`, S5 §§2.10, 6–7 and D41 (closed). Explicit separate re-anchor keeps the accepted skipped-span fork-detection cost, full retained history and endpoint audit. Merged receipt composition in §5.3 uses the admitted anchor and whole Evidence, with no receipt-failure fallback. Code re-pin, adapter qualification and K3/D12 activation remain separate gates; no weaker legacy Context is authorized. |
