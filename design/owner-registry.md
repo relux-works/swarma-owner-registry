@@ -1182,6 +1182,37 @@ the registry's prior admitted watermark.
 | `registry-resolved-visibility/1` (V) | Distinct `T_V`, `f_V`, `epsilon_V`, `R_V`, collected **after** matching resolution; constrained by remaining original D and its own delta cap. No inherited C reserve or new five seconds. Values remain unqualified. | f covers final resolved-head/authority/use checks and the complete durable visibility marker/ref-pointer plus associated use commit. Witness/custodian work already spent time before entry; it is not hidden in a fresh timer. |
 | `registry-freshness/1` (F) | `T_F`, `f_F`, `epsilon_F`, `R_F` selected for the exact action (`publish` or `revalidate`) and bounded retained-history workload, under its original D/delta cap. Both action-specific bounds require qualification. | Publish includes exact bytes/history/anchor/outcome and pointer/use durability; Retry includes new time floors and use state with the original publication unchanged. Existing history copying and persistence cost cannot be treated as constant just because the input record is bounded. |
 
+**Protected provider-name map, version 1 (design only).** The closed table below
+is part of the protected enrolled consumer profile. Apply the same exact mapping
+when preparing independently expected bindings and when encoding the handoff;
+compare the encoded field/value pair against that protected expectation again
+at admission. Native records, identity bytes/domains and use-state names remain
+unchanged. This is an explicit allowlist, not general slash replacement or
+normalization; no request, receipt or unregistered version can extend it.
+
+| Exact native name | Provider field | Exact provider value |
+| --- | --- | --- |
+| `registry-candidate-commit/1` | `Window.Profile` | `registry-candidate-commit:1` |
+| `registry-resolved-visibility/1` | `Window.Profile` | `registry-resolved-visibility:1` |
+| `registry-freshness/1` | `Window.Profile` | `registry-freshness:1` |
+| `registry-window-intent/1` | Never a provider field; native owning identity codec (§9.1.3), whose exact bytes feed the enrolled operation digest. | None; retain the native name in its own codec. |
+| `QTUse/1` | `TransitionVersion` | `QTUse:1` |
+
+The field is part of each mapping: a window name cannot become TransitionVersion
+and QTUse cannot become Window.Profile. Unknown names/versions and swapped fields
+refuse protected consumer binding even when their spelling fits the alphabet.
+Literal `/` in either provider field refuses `encoding`; alphabet conformance
+alone grants no preparation, use or activation authority. Broker source pin for
+this representation constraint: `b38aeda82fb563503960836c771bcc94e8103810`,
+[timeconf/handoff_linux.go:137–159](https://github.com/relux-works/swarma-credential-broker/blob/b38aeda82fb563503960836c771bcc94e8103810/timeconf/handoff_linux.go#L137-L159)
+and [timeconf/receipt.go:103](https://github.com/relux-works/swarma-credential-broker/blob/b38aeda82fb563503960836c771bcc94e8103810/timeconf/receipt.go#L103).
+The published template requires explicit native-name mapping
+([docs/time-window-profile.md:25–32](https://github.com/relux-works/swarma-credential-broker/blob/b38aeda82fb563503960836c771bcc94e8103810/docs/time-window-profile.md#L25-L32));
+expected window/transition equality is checked at
+[timeconf/window_linux.go:39–40](https://github.com/relux-works/swarma-credential-broker/blob/b38aeda82fb563503960836c771bcc94e8103810/timeconf/window_linux.go#L39-L40).
+This code citation does not change T's documentation pin or qualify a registry
+adapter; Q18–Q20 remain open.
+
 These are explicit unqualified parameters, not permissive defaults. No universal
 250/1000/2000 ms allowance is assigned. The installed profile must publish finite
 values, units, maximum workload, rate/error calculation, enforcement/fence,
@@ -1475,6 +1506,18 @@ against the selected actual mechanism in isolated fixtures.
 | `TestWindowPostIntentInventoryChanged` | Add later H into frozen content inventory; candidate mismatch refuses, no altered witness intent. | Frozen content unchanged; approved versioned completion binds H in the atomic composite. | PENDING |
 | `TestWindowUseRestoreDespiteProviderW` | Restore old use ledger while provider W stays current, or start competing instance; independent consumer authority fences. | Current consumer/provider histories, exact revisions and sole live instance reconcile. | PENDING |
 | `TestWindowOriginalOrBudgetSubstitution` | Swap receipt/original, owner bytes, operation/purpose/generation, boot, deadline or reserve; intended authentication/binding/overflow refusal, no writes. | Exact protected closure/intent and original qualified budget pass. | PENDING |
+| `TestWindowProviderNameLiteralSlash` | Copy a native slash name into either provider field; `encoding` refuses, with no prepared authority, burn or act. | All four mapped provider values in map version 1 fit the broker alphabet; exact field/value pairs pass name validation only. | PENDING |
+| `TestWindowProviderNameWrongVersion` | Use an unregistered `:2` in either field, including when preparation and encoding both propose it; protected mapping refuses before burn/act. | Exact version-1 mapping at both preparation and encoding passes name binding. | PENDING |
+| `TestWindowProviderNameUnregistered` | Supply an unregistered native or provider name, or place `registry-window-intent/1` in a provider field; refuse mapping (literal slash also fails encoding), no burn/act. | Native intent codec remains outside provider fields; only the table's enrolled names pass mapping. | PENDING |
+| `TestWindowProviderNameSwappedField` | Put `QTUse:1` in Window.Profile or a window value in TransitionVersion, or map differently at preparation and encoding; refuse protected binding despite valid alphabet, no burn/act. | Each exact table row supplies its declared field at preparation, encoding and admission; no native record/identity bytes change. | PENDING |
+
+These name controls target the protected map above and the broker's pinned
+alphabet/field checks at `b38aeda82fb563503960836c771bcc94e8103810`:
+[timeconf/receipt.go:103](https://github.com/relux-works/swarma-credential-broker/blob/b38aeda82fb563503960836c771bcc94e8103810/timeconf/receipt.go#L103),
+[timeconf/handoff_linux.go:137–159](https://github.com/relux-works/swarma-credential-broker/blob/b38aeda82fb563503960836c771bcc94e8103810/timeconf/handoff_linux.go#L137-L159)
+and [timeconf/window_linux.go:39–40](https://github.com/relux-works/swarma-credential-broker/blob/b38aeda82fb563503960836c771bcc94e8103810/timeconf/window_linux.go#L39-L40).
+They are pending consumer tests, not evidence that the generic provider alphabet
+enforces this registry allowlist or that any adapter is activated.
 
 Future gates must demonstrate detection with bounded plants: stale-c-only
 admission, omitted unused-revision CAS, H-in-key, late-act acceptance, missing-use
