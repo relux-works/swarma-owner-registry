@@ -1,8 +1,8 @@
 # Owner registry service design
 
-Review draft, 2026-10-25, reconciled to merged S4 D38–D41.
-The pinned public S4 record contracts are normative for this design. Content
-approval, repository landing, consumer integration and activation are separate;
+Review draft, 2026-10-25, reconciled to merged S4 D38–D41 and S5 receipts.
+The pinned public S4 record and S5 receipt contracts are normative for this
+design. Content approval, repository landing, consumer integration and activation are separate;
 this text supplies no runtime or custody/transport/recovery qualification.
 
 ## 1. Scope and source contracts
@@ -22,7 +22,7 @@ Immutable inputs read for this design:
 | Reference | Exact revision and relevant surface |
 | --- | --- |
 | F | [Shared formats](https://github.com/relux-works/waggle/blob/f76a400ebeb599b95a9bf9b2c59b522bef0392d8/spec/swarm-envelope-2.md), §§2–7: envelopes, signer contract, provenance, refusal order and consumer gates. |
-| D | [D1–D41](https://github.com/relux-works/waggle/blob/f76a400ebeb599b95a9bf9b2c59b522bef0392d8/UNRESOLVED_QUESTIONS.md), especially D30 and D38–D41: separate freshness, required journal prior records, bounded freshness admission and explicit re-anchor. Design decisions are recorded in §10; the remaining composition API is a separate S5 dependency. |
+| D | [D1–D41](https://github.com/relux-works/waggle/blob/f76a400ebeb599b95a9bf9b2c59b522bef0392d8/UNRESOLVED_QUESTIONS.md), especially D30 and D38–D41: separate freshness, required journal prior records, bounded freshness admission and explicit re-anchor. Design decisions are recorded in §10; merged receipt composition is pinned separately as S5 below. |
 | K | [Key service](https://github.com/relux-works/swarma-keymaker/blob/0ae0c4e93c3fae9db2bcadcfb5eeafbdcf0668c0/spec/keymaker.md), §§4.3, 5, 8–9: custody, pins, enrollment and purpose 5. |
 | W | [Witness consumer](https://github.com/relux-works/swarma-keymaker/blob/5eb89870d25cd9c4dd9e71180d9449f18fba206f/spec/keymaker-witness.md), §§3.3–6, 8: operations, intent ordering, recovery and WC1. |
 | B | [Broker](https://github.com/relux-works/swarma-credential-broker/blob/f2c01f52477b5885aefd5b6bd04d09a6a22813b2/spec/broker.md), §§6.4–6.6: local authority and the registry boundary. |
@@ -31,16 +31,18 @@ Immutable inputs read for this design:
 | P | Public [ccj](https://github.com/relux-works/swarma-registrar/tree/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/ccj), [enrollment](https://github.com/relux-works/swarma-registrar/tree/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/enrollment) and [registry](https://github.com/relux-works/swarma-registrar/tree/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/registry) packages. |
 | WS | [Witness server proposal](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md), PR #20: exact server/wrapper, challenged reads, strict custodian and limits; spec only, not deployed or qualified. |
 | V | S4 public [record](https://github.com/relux-works/waggle/tree/f76a400ebeb599b95a9bf9b2c59b522bef0392d8/record), [verifier](https://github.com/relux-works/waggle/tree/f76a400ebeb599b95a9bf9b2c59b522bef0392d8/verifier) and [fixtures](https://github.com/relux-works/waggle/tree/f76a400ebeb599b95a9bf9b2c59b522bef0392d8/vectors/swarm-envelope-2): pure admission, not I/O or activation. |
+| S5 | [Receipt contract](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/spec/swarm-envelope-2.md), §§2.10, 6–7; [D41 closed / D42 open](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/UNRESOLVED_QUESTIONS.md); [verifier API classification](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/verifier/README.md), [receipt](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/verifier/receipt.go) and [service validation](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/verifier/service.go). Merged on 2026-10-25; design source, not the current module pin. |
 
 S4 at `f76a400ebeb599b95a9bf9b2c59b522bef0392d8` is merged and
 adds freshness/1, D39 journal narrowing, D40 state/read bounds and D41 explicit
 re-anchor to S3's journal/checkpoint contracts. F §§2.7, 2.9, 6–7 and D38–D41
 are the public sources for the requirements below. Content approval and landing
-do not activate this service or qualify consumers. The code module is pinned to
-S4 `f76a400ebeb599b95a9bf9b2c59b522bef0392d8` by §11's dependency/profile
-re-pin slice; new entry-point implementations and their activation stay gated.
-S5 will supply the approved freshness-receipt composition path (§5.3); its API
-is not part of the merged S4 surface.
+do not activate this service or qualify consumers. The code module remains pinned to
+S4 `f76a400ebeb599b95a9bf9b2c59b522bef0392d8`. Merged S5 at
+`5f4e7435d75697385ff6ce15a7501ac6f31c8ea5` supplies §5.3's receipt API.
+A separate dependency/profile re-pin (§11, row 1b), intake adapter and consumer
+qualification must precede S5 use; design reconciliation changes no code pin
+or activation gate.
 
 Non-goals: message delivery, credential/account issuance, operator-act execution,
 new verifier implementation, root recovery, contact records, registry exchange
@@ -155,13 +157,19 @@ issuer snapshots and id bindings. Explicitly pass `ServiceAuthority`,
 agent/device collections with all present roots. Call `VerifyAttestation`,
 `VerifyServiceAttestation`, `CheckRevocation`, `Authorize` or `VerifyJournal`
 for the corresponding profile; retain typed codes and empty refusal plans.
-For S4 registry-domain currentness use the separate `VerifyFreshness` or explicit
-`VerifyFreshnessReanchor` with §5.3's retained state/read facts; these do not
-compose into the legacy APIs before S5. Intake consumes three issuer snapshots:
-the registry's own, the operator root's and the grant root's; each retains the
-legacy maximum age of 60 seconds. Under B an idle own snapshot exceeds that age,
-so registry-domain attestations and every intake check needing it refuse until
-the pending S5 composition in §5.3 is implemented and qualified. Grant/1, D33
+For registry-domain currentness, successful `VerifyFreshness` or explicit
+`VerifyFreshnessReanchor` supplies `Result.FreshnessReceipt` under merged S5.
+After atomically persisting its admitted anchor, watermark and any re-anchor
+audit, §5.3's adapter supplies `Context.FreshnessReceipt`,
+`Context.RequireFreshnessReceipt` and stricter-only
+`Context.FreshnessMarginSeconds` with the
+same whole `SignedSnapshots` Evidence and genuine current facts. Intake consumes
+registry-, operator- and grant-root snapshots: only the receipt-bound registry
+snapshot can replace its own-age check. The current S4-pinned intake retains
+the legacy 60-second own-age checks and rebuilds Evidence per admission; it
+still refuses an aged idle registry snapshot until row 1b and the row 7b
+retaining adapter are implemented and qualified. Entry-point classes and the
+separate new-snapshot submission path are specified in §5.3. Grant/1, D33
 service keys and device attestations also require their relevant external issuer
 snapshots to stay current; a registry receipt cannot extend them (D32, §10 D42).
 No function commits, executes effects, fetches or authenticates witness wire.
@@ -359,7 +367,7 @@ currentness and original signatures.
 the full signed chain, exact three-way binding and fresh authenticated head read.
 This does not relax the legacy methods' own-issued_at/checkpoint-age rules.
 The registry publishes and also consumes its own snapshot in intake. An idle
-base older than 60 seconds therefore needs pending S5 receipt composition for
+base older than 60 seconds therefore needs the merged S5 receipt composition for
 registry-domain intake, as do Keymaker/broker old-base consumers (§§3, 5.3,
 5.5–5.6); no younger Context or duplicate verifier supplies that authority.
 
@@ -489,32 +497,95 @@ record and future-effective revocations without later from times; unseen
 intermediate additions later omitted also require qualified history coverage.
 Without that evidence stay unavailable, never widen authority on unknown history.
 
-#### S5 receipt dependency
+#### Merged S5 receipt composition
 
-The legacy `VerifyAttestation`, `VerifyMessage`, `Authorize`, `VerifyOperator`,
-`CheckRevocation` and `VerifyJournal` keep their own snapshot/checkpoint-age
-checks. S4 freshness success is not a receipt those methods accept. Keep the
-public `TestFreshnessCompositionBoundary` refusal and current-snapshot positive;
-no weaker Context, fabricated younger bytes/time or second verifier composes it.
+S5 §§2.10 and 6 at the pinned `5f4e7435d75697385ff6ce15a7501ac6f31c8ea5`
+provide the API before Keymaker K3 activation and the broker D12 adapter.
+The current S4 module does not expose it; row 1b re-pins the code separately.
+Retain `TestFreshnessCompositionBoundary` and its current-snapshot control for
+legacy/no-receipt behavior. Never substitute younger bytes/time, a weakened
+Context or another verifier for receipt composition.
 
-The approved next path is S5's freshness receipt, before Keymaker K3 activation
-and the broker D12 adapter. Only `VerifyFreshness` or `VerifyFreshnessReanchor`
-may issue it, bound to the exact snapshot, checkpoint, freshness and registry
-root ids. Expiry is the exclusive bound
-`min(tip.issued_at + max_age, WitnessReadAt + max_age)`, with no extension.
-It exists only in process memory; audit records its ids, never the receipt.
-Restart/persistence cannot restore receipt authority. S5's API/representation
-and supported consumer composition still require their own implementation and
-review; no receipt API fields or legacy age waiver are defined here.
+Only successful full `VerifyFreshness` or `VerifyFreshnessReanchor` returns
+`Result.FreshnessReceipt`, an opaque immutable original pointer, alongside the
+candidate Plan. Refusals return a zero Plan and nil receipt. It binds the exact
+registry root/owner, snapshot bytes/id, checkpoint, freshness tip and Evidence
+premise. It has no constructor, accepted `Present` input or persistence/JSON
+format; zero, copied and reflection-created values are invalid. Original-pointer
+sharing is supported. `receipt.Audit()` returns detached origin ids and recovery
+endpoints; its bool establishes origin only, never current validity or authority.
+It grants neither Commit nor effects. No receipt survives restart.
 
-For the registry's own intake, the planned S5 path verifies its own freshness
-chain with `VerifyFreshness` and an authenticated witness read, holds one
-`SignedSnapshots` Evidence for the current snapshot, and passes the receipt in
-the intake Context. Keep that Evidence instance for the receipt's lifetime;
-a rebuilt Evidence cannot reuse its receipt. After a real head change, rebuild
-the Evidence for the reissued fresh snapshot and obtain the appropriate new
-receipt before relying on aged-base composition. After restart no receipt exists
-until `VerifyFreshness` runs again; witness unavailability refuses intake.
+Expiry is fixed at mint, with protected `max_age` at most 60 seconds:
+`E = min(tip.issued_at, issuing WitnessReadAt) + max_age`.
+Use requires `max(now, W) < E - Context.FreshnessMarginSeconds` (exclusive).
+`FreshnessMarginSeconds` is an integer 0–60, default 0; it only tightens.
+Newer reads never extend E. An F success at its inclusive age boundary can mint
+an already unusable receipt. Existing trusted-time, watermark, non-future,
+snapshot signature/schema/completeness, cumulative/rollback-safe qualification
+and effective-revocation checks remain mandatory.
+
+For receipt consumers and validate-only calls, attach the original pointer as
+`Context.FreshnessReceipt`. `Context.RequireFreshnessReceipt=true` refuses absence;
+nil plus false deliberately selects legacy own-age behavior. A supplied receipt
+always selects receipt mode even if legacy own-age would pass. A receipt refusal
+never retries without the receipt. R runs after the entry point's existing
+trusted-time/watermark gate and before validity/admission continuation; earlier
+envelope/signed-evidence failures retain precedence. Preserve these typed codes
+through K1/G7/O2, with zero identity/Unavailable and exact errors where applicable:
+
+| Order | Receipt check | Refusal |
+| --- | --- | --- |
+| R1 | Required presence, authentic original pointer, margin 0–60 | `freshness_receipt_unavailable` for required absence; `freshness_receipt_invalid` for invalid provenance or margin |
+| R2 | All required current binding/read presence first, then syntax, then exact whole-Evidence/root/owner/snapshot/witness/admitted-anchor/read consistency | Missing: `freshness_receipt_unavailable`; malformed/future read: `freshness_receipt_invalid`; foreign binding, earlier read or rebuilt Evidence: `freshness_receipt_binding_mismatch` |
+| R3 | Exclusive fixed expiry `max(now,W) < E-margin` | `freshness_receipt_expired` |
+
+The row 7b intake adapter must retain **one entire immutable `SignedSnapshots`
+Evidence for the receipt's lifetime**, not just the registry row's bytes/id.
+First verify the full normal/re-anchor producer proof. Atomically persist its
+Plan's **admitted tip `FreshnessAnchor`**, watermark and any re-anchor audit
+before use; never pass the old mint anchor to a receipt consumer. Then supply
+the receipt and that admitted anchor/watermark with the same whole Evidence,
+the current authenticated `JournalWitness`, `WitnessReadAt`, and genuine
+`Now`/time-confidence facts. The read must be well-formed, non-future at
+`min(now,W)` and no earlier than the issuing read, with exact bound witness
+registry/owner/checkpoint/sequence/head. A new immutable `Verifier` with updated
+genuine clock facts and the same Evidence is allowed; this neither remints nor
+extends the receipt. Repeat current checks at the serialized effect boundary.
+
+Rebuild Evidence and re-run F to mint a new receipt after any snapshot or
+cumulative/rollback-safe premise change, including **other rows of the whole
+Evidence map** and changes later returning to the same ids/booleans. Re-anchor
+and restart also require new full F admission and a newly minted receipt. `complete=true` alone never proves cumulative history. After restart
+there is no receipt until successful full F verification; witness unavailability
+refuses receipt-backed intake. Today's `internal/intake` calls `Present` to
+rebuild snapshots on every admission. Retaining/reusing the Evidence instance
+is planned row 7b work, not behavior supplied by attaching a field today.
+
+Choose the operation's evidence path up front. A newly submitted `revocation/1`,
+including a replacement registry snapshot or an operator-/grant-root snapshot,
+is validated through the existing **no-receipt own-age submission path** using
+its exact submitted bytes and issuer metadata. A new receipt is obtained only
+after that snapshot's committed head is freshness-verified. An old receipt
+cannot authenticate replacement Evidence. Do not attach a registry receipt to
+`CheckRevocation` for an operator or grant root: its explicit root must equal
+the receipt root. Neither submission nor authority paths may retry without a
+receipt after a receipt refusal.
+
+The S5 entry-point classes and our intake mapping are:
+
+| Class | Entry points | Registry intake mapping / age boundary |
+| --- | --- | --- |
+| May extend only the bound registry-root snapshot's own-age | `VerifyAttestation` (agent), `VerifyMessage`, `Authorize`, `CheckRevocation`, `VerifyEnvelope` where applicable | Agent attestation intake calls `VerifyAttestation`; grant-chain intake calls `Authorize` and keeps all other-domain ages; receipt-backed current registry-root checks call `CheckRevocation`. Newly submitted snapshots instead use the no-receipt path above. `VerifyMessage` and `VerifyEnvelope` have no direct current intake call. |
+| Validate-only, R1–R3 required in receipt mode | `VerifyAttestation(device=true)`, `VerifyOperator`, `VerifyServiceAttestation` | Device intake calls `VerifyAttestation(device=true)`; service intake calls `VerifyServiceAttestation`, after its trusted-time gate and before service validity. Operator-/grant-root snapshot ages remain mandatory; service is grant-domain, not a registry-age extension. `VerifyOperator` has no direct current intake call. |
+| Outside receipt mode by design | `VerifyJournal`, `VerifyFreshness`, `VerifyFreshnessReanchor` | The planned journal/freshness adapters run their full independent contracts and ignore all receipt-consumption fields, even invalid ones. Journal snapshot own-age remains; the F producers mint only on full success. None is a current record-intake call. |
+
+S5's remaining exports perform no receipt-consuming admission: `New` stores
+Context; `Evidence.IsAvailable` and `OperatorRecordCode` keep their context-free
+helper contracts. `Present` and receipt `MarshalJSON`/`UnmarshalJSON` reject
+receipt construction/persistence, while `Audit` reports origin only. The class
+split accounts for every verification entry point; the `VerifyAttestation`
+device flag intentionally selects two different classes.
 
 D32 separation limits the default S5 scope to the registry-owner domain.
 Operator-root and grant-root snapshots still need their own age at most 60 seconds;
@@ -606,15 +677,16 @@ truth. Do not lower time or chain calls over expired intermediate checkpoints;
 obtain current proof within bounds or await a separately qualified historical
 path. Under B, S4's full registry freshness pipeline admits an aged unchanged base
 with a current tip/read; it does not make those legacy methods accept it.
-Keymaker therefore has a pending S5 receipt-composition dependency before K3
-activation. Retained success is not renewed authority or revocation completion.
+Keymaker therefore depends on the merged S5 receipt path and separately
+qualified consumer integration before K3 activation. Retained success is not
+renewed authority or revocation completion.
 
 ### 5.6 Broker consumer composition
 
 B §6.5 retains broker v0 local authority/restore fences until reviewed migration.
-The broker D12 adapter depends on the pending S5 receipt path in §5.3, separate
-from S4 landing and this registry's publication implementation. It must combine
-that bounded current registry evidence with all original grant/operator/domain,
+The broker D12 adapter depends on the merged S5 receipt path in §5.3 and
+separately qualified integration, not just S4/S5 landing or this registry's
+publication implementation. It must combine that bounded current registry evidence with all original grant/operator/domain,
 assurance and critical-effect checks through a supported reviewed composition.
 No registry receipt changes other issuers' signatures/currentness, substitutes
 for a parent grant or weakens emergency-stop/restart policy. Neither S4 format
@@ -819,7 +891,7 @@ recommendations without reopening accepted S4 decisions. Activation is separate.
 | Q13: witness metadata disclosure | Open with the owner: approve what witness/custodian metadata may be disclosed and to which read principals before public distribution. Recommend minimal authenticated disclosure; this design makes no provider or disclosure choice. |
 | Q14: D39 prior records | Decided, recorded 2026-10-25; F §§2.7, 6 and D39. Every advancing proof supplies both prior entry anchor and exact prior checkpoint via IDJournal, J5a then updated J6; no extra projection timestamp. |
 | Q15: D40 state and bounds | Decided, recorded 2026-10-25; F §§2.9, 6–7 and D40. Explicit authorized publication genesis, exact FreshnessAnchor and WitnessReadAt, independent 64-publication/532,480-byte bounds; durable state before use. |
-| Q16: D41 recovery/composition | Decided, recorded 2026-10-25; F §§2.9, 7 and D41. Explicit separate re-anchor with the accepted skipped-span fork-detection cost, full retained history and endpoint audit. S4 lands with its documented composition boundary; approved S5 receipt requirements are in §5.3, before K3/D12 activation. The receipt API remains pending S5, not an open choice of a weaker legacy Context. |
+| Q16: D41 recovery/composition | Decided, 2026-10-25: S5 merged at `5f4e7435d75697385ff6ce15a7501ac6f31c8ea5`, S5 §§2.10, 6–7 and D41 (closed). Explicit separate re-anchor keeps the accepted skipped-span fork-detection cost, full retained history and endpoint audit. Merged receipt composition in §5.3 uses the admitted anchor and whole Evidence, with no receipt-failure fallback. Code re-pin, adapter qualification and K3/D12 activation remain separate gates; no weaker legacy Context is authorized. |
 | Q17: D42 external-root currentness | Open design question, recorded 2026-10-25, owned by the owner and the content review, due before the broker D12 adapter. The current D32/S5 scope is unchanged. Three alternatives: (a) the root signs snapshot content only when it changes; the registry attests currency with its own freshness/1 and has no authority to alter that content. A compromised registry-owner key could withhold a newer root snapshot; the witness and full history mitigate this only if the root checks that its own submission was journaled. Freshness/1 at F (f76a400) binds a single snapshot, so this alternative requires a format change by the format owner. (b) each root maintains its own freshness/1 chain, signed by that root. This preserves D32 separation but requires an online freshness signer per root, separate from the content key. (c) the roots remain online and reissue snapshots within max_age; this is a custodian requirement. D42 remains an activation gate for grant, D33 service-key and device intake. No option is selected and no external-root extension profile is approved here. |
 
 ## 11. Implementation slices and evidence plan
@@ -832,14 +904,15 @@ No production activation follows from mocks or two implementations agreeing.
 | --- | --- | --- |
 | 1. Pin contracts/activation | `TestUnpublishedProfileRefused`, `TestCrossRoleRootRefused`, `TestForeignPurpose5DomainRefused` | `TestPinnedS3ProfileAccepted`; accepted S3 and reviewed S4/custody/API gates before dependent activation. |
 | 1a. S4 code re-pin before dependent slices | `TestS3PinCannotAdmitFreshness`, `TestS4ProfileWideningRefused`, `TestLegacyCurrentnessNotWeakened` | `TestPinnedS4ProfileAccepted`; explicit dependency/contracts/pins and fixture re-pin to F, preserving original refusal suites; separate review before implementation uses S4. |
+| 1b. S5 code re-pin before receipt adapter (7a/7b) | `TestS4PinCannotExposeReceipt`, `TestS5ProfileWideningRefused`, `TestS5RepinPreservesLegacyRefusals` | `TestPinnedS5ReceiptProfileAccepted`; separately update module/contracts/pins and fixtures to S5 `5f4e7435d75697385ff6ce15a7501ac6f31c8ea5`, preserving prior refusal suites. Until reviewed re-pin, code stays at S4 `f76a400ebeb599b95a9bf9b2c59b522bef0392d8`. |
 | 2. Pure intake/service adapter | `TestWrongIssuerScopeRefused`, `TestInvalidSignatureBeforeConflict`, `TestDuplicateCCJMemberRefused`, `TestOversizeNoMutation`, `TestUnknownKeyClassRefused`, `TestServiceForbiddenRoleRefused`, `TestServiceMissingParentRefused`, `TestServiceDepthZeroRefused`, `TestServiceRevokedParentRefused`, `TestServiceRevokedAttestationRefused` | `TestAuthorizedSignedRecordAccepted`, `TestServiceDelegationAccepted`; exact S3 profiles and parent/revocation checks, no effects. |
 | 3. Serialized durable storage/bounds | `TestChangedBytesSameIDRefused`, `TestConcurrentHeadConflict`, `TestSyncFailureFences`, `TestSequenceExhaustionNoWrap`, `TestPublicationProofCapRefused`, `TestWitnessWrapperCapRefused` | `TestExactRetrySameOutcome`, `TestCrashReconcilesExactCommit`, `TestBoundedCompleteProofAccepted`, `TestWrapperFitsBeforeIntent`; no writes/intent on preflight refusal. |
 | 4. Enrollment projection | `TestInvalidMirrorFencesWholeLoad`, `TestUnapprovedCommitRefused`, `TestTombstoneHistoryCannotDisappear`, `TestReservedSigsWinsSnapshotWide` | `TestOfflineEnrollmentSignedCommitAccepted`; unchanged P/R and approved E1 rotation. |
 | 5. Journal/witness proof | `TestWriterCannotAppendWitness`, `TestStaleChallengeRefused`, `TestUnresolvedIntentFences`, `TestRestoredCloneCannotServe`, `TestSameHeadCheckpointForkRefused`, `TestAdvancingAnchorMissingRefused`, `TestAnchorTimeRegressionRefused`, `TestCheckpointTimeRegressionRefused`, `TestEightFieldProjectionRefused`, `TestPublicationLinkLossRefused`, `TestIntentOnlyPublicationRefused`, `TestDelayedProofExpiredRefused` | `TestExactIntentCommitResolution`, `TestLostResolutionReceiptFreshHead`, `TestAnchoredSuffixAccepted`, `TestValidatedProjectionReduced`, `TestPublicationBundleVerifiedAtIssue`; real ACL/crash/custodian/exclusion qualification, archive is not a current receipt. |
 | 6. Base snapshots/time/capacity | `TestHeadChangeStaleSnapshotRefused`, `TestHeadChangeOldSnapshotRefRefused`, `TestHeadChangeMissingRecordRefused`, `TestHeadChangeMissingReissueRefused`, `TestHeadChangeMissingPriorCheckpointRefused`, `TestHeadChangeWrongPriorCheckpointRefused`, `TestStaleSnapshotRefused`, `TestEqualIssueTimeDifferentBytesRefused`, `TestCumulativeRemovalRefused`, `TestGapRefused`, `TestSplitHeadSignalsAndRefuses`, `TestSnapshotCapacitySignalsWithoutDrop`, `TestTimeLossNoPublication` | `TestHeadChangeReissueAccepted` (P-JRN-publish-reissue at F), `TestFreshCompleteSnapshotAccepted`, `TestConsumerAgeBoundary`, `TestMatchingGossipHeadAccepted`; identical cumulative set reissued at greater issued_at, same-transaction add/revocation/1 entry and new checkpoint snapshot reference; issuer profiles, byte/count limits and provider qualification. |
 | 7. S4 publisher/currentness after re-pin | `TestFreshnessMissingRefused`, `TestFreshnessStaleRefused`, `TestFreshnessWrongRootRefused`, `TestFreshnessWrongSnapshotRefused`, `TestFreshnessWrongHeadRefused`, `TestFreshnessSameSeqDifferentBindingRefused`, `TestFreshnessBackwardSeqRefused`, `TestFreshnessBackwardTimeRefused`, `TestFreshnessPredecessorMissingRefused`, `TestFreshnessHeadRaceRefused`, `TestFreshnessUnresolvedIntentRefused`, `TestSlowWitnessClosesFreshness`, `TestFreshnessHistoryOmissionRefused`, `TestRestoredFreshnessStateFences`, `TestOldS3RejectsAgedBase`, `TestFreshnessCannotReviveAuthority` | `TestFreshnessKeepsJournalHead`, `TestRealChangeUsesWitnessTransaction`, `TestAgedBaseAcceptedByVerifyFreshness`, `TestFreshnessAtomicRetry`; identical base bytes and unchanged registry/witness positions on healthy freshness; exact effects and boundaries verified, never a global old-verifier waiver. |
-| 7a. S5 receipt composition before K3/D12 | `TestReceiptWrongBindingRefused`, `TestReceiptAtExpiryRefused`, `TestReceiptExtensionRefused`, `TestReceiptAfterRestartRefused`, `TestNonFreshnessReceiptIssuerRefused`, `TestLegacyOldBaseCompositionRefused` | `TestFreshnessReceiptCompositionAccepted`, `TestCurrentSnapshotLegacyCompositionAccepted`; only freshness calls issue in-memory exact-id-bound receipts, exclusive fixed expiry and ids-only audit; API pending S5. |
-| 7b. Registry intake S5 and D42 activation | `TestQuietRegistryIntakeWithoutReceiptRefused`, `TestQuietRegistryIntakeRebuiltEvidenceRefused`, `TestRegistryIntakeWitnessUnavailableRefused`, `TestStaleGrantSnapshotWithRegistryReceiptRefused` | `TestQuietRegistryIntakeWithReceiptAccepted` (more than 60 seconds of quiet, same Evidence), `TestReissuedRegistryIntakeEvidenceAccepted`, `TestCurrentGrantSnapshotWithRegistryReceiptAccepted`; pending S5, unchanged external-root age and D42 gate, no effects on refusal. |
+| 7a. S5 receipt composition before K3/D12 | `TestReceiptWrongBindingRefused`, `TestReceiptAtExpiryRefused`, `TestReceiptExtensionRefused`, `TestReceiptAfterRestartRefused`, `TestNonFreshnessReceiptIssuerRefused`, `TestLegacyOldBaseCompositionRefused` | `TestFreshnessReceiptCompositionAccepted`, `TestCurrentSnapshotLegacyCompositionAccepted`; merged S5 producers return `Result.FreshnessReceipt`, used via Context after admitted-plan persistence; exclusive fixed expiry, R1–R3 and origin-only audit; row 1b re-pin and adapter qualification remain gates. |
+| 7b. Registry intake S5 and D42 activation | `TestQuietRegistryIntakeWithoutReceiptRefused`, `TestQuietRegistryIntakeRebuiltEvidenceRefused`, `TestRegistryIntakeWitnessUnavailableRefused`, `TestStaleGrantSnapshotWithRegistryReceiptRefused` | `TestQuietRegistryIntakeWithReceiptAccepted` (more than 60 seconds of quiet, same Evidence), `TestReissuedRegistryIntakeEvidenceAccepted`, `TestCurrentGrantSnapshotWithRegistryReceiptAccepted`; planned retaining adapter after row 1b, same whole Evidence across genuine clock updates, domain-specific submission and unchanged external-root age/D42 gate; no effects on refusal. |
 | 8. Restore and consumer activation | `TestRestoredBytesCannotBootstrap`, `TestJointLossFences`, `TestStopWorksWithoutRegistry`, `TestNoCompletionOnIntakeAck`, `TestStoredProofNotCurrentAuthority` | `TestOffNodeExactCandidateRecovery`, `TestReviewedConsumerMigration`, `TestKeymakerPublicationAndStatus`; owner barriers, independent retained proofs/freshness and consumer-specific activation. |
 
 Slice 6 uses the actual three-entry
@@ -873,7 +946,17 @@ Additional planned S4 controls pair each failure class with named valid controls
 | Proof/query and route caps | `TestFreshness65PublicationsRefused` (freshness_malformed), `TestFreshness65QueriesRefused` (freshness_request_invalid), `TestFreshnessOversizeRecordRefused` (freshness_malformed), `TestFreshnessWrongRouteRefused` (proof_limit) | `TestFreshness64PublicationsAccepted`, `TestFreshness64QueriesAccepted`, `TestFreshnessBundleRouteAccepted` |
 | Explicit re-anchor, never silent fallback | `TestFreshnessNoImplicitReanchor` (normal freshness_gap), `TestFreshnessReanchorGenesisRefused` (freshness_state_invalid), `TestFreshnessReanchorBackwardHeadRefused` (freshness_rollback), `TestFreshnessReanchorEqualHeadForkRefused` (freshness_fork), `TestFreshnessReanchorSnapshotMismatchRefused` (freshness_binding_mismatch), `TestFreshnessReanchorSequenceNotAdvancedRefused`, `TestFreshnessReanchorTimeNotAdvancedRefused` (freshness_rollback) | `TestFreshnessReanchorSameHeadAccepted`, `TestFreshnessReanchorAdvancedHeadAccepted`, `TestFreshnessAdjacentReanchorAccepted` (skip count zero) |
 | Witness and cumulative safety after recovery | `TestFreshnessReanchorWitnessUnavailableRefused`, `TestReanchorCannotSupplyRollbackSafe`, `TestReanchorCumulativeRemovalRefused` (unavailable/invalid evidence, no use) | `TestReanchorQualifiedCumulativeEvidenceAccepted`, `TestFreshnessReanchorAuditPersisted` |
-| Consumer composition | `TestLegacyOldBaseCompositionRefused` (legacy own-age refusal as in V's TestFreshnessCompositionBoundary), all slice 7a receipt and 7b intake refusals | `TestCurrentSnapshotLegacyCompositionAccepted`, `TestFreshnessReceiptCompositionAccepted`, `TestQuietRegistryIntakeWithReceiptAccepted`, `TestReissuedRegistryIntakeEvidenceAccepted`, `TestCurrentGrantSnapshotWithRegistryReceiptAccepted` after S5 |
+| Consumer composition | `TestLegacyOldBaseCompositionRefused` (legacy own-age refusal as in V's TestFreshnessCompositionBoundary), all slice 7a receipt and 7b intake refusals | `TestCurrentSnapshotLegacyCompositionAccepted`, `TestFreshnessReceiptCompositionAccepted`, `TestQuietRegistryIntakeWithReceiptAccepted`, `TestReissuedRegistryIntakeEvidenceAccepted`, `TestCurrentGrantSnapshotWithRegistryReceiptAccepted` after S5 re-pin/adapter qualification |
+
+Additional planned S5 adapter controls (after row 1b; no execution claimed):
+
+| Contract | Planned negative / exact boundary | Named positive controls |
+| --- | --- | --- |
+| Atomic admitted-anchor transition | `TestReceiptMintAnchorRefused` (`freshness_receipt_binding_mismatch` for the old producer anchor on an advancing proof); no use before atomic admitted-plan persistence | `TestReceiptAdmittedAnchorAccepted` with exact persisted tip anchor/watermark and recovery audit where applicable |
+| Same Evidence across genuine clocks and exclusive expiry | `TestReceiptClockUpdateAtExpiryRefused` (`freshness_receipt_expired` at E-margin); existing `TestReceiptExtensionRefused` | `TestReceiptClockUpdateSameEvidenceAccepted` with a new immutable Verifier and genuine later clock before E-margin |
+| Rebuild and whole-map premise changes | Existing `TestQuietRegistryIntakeRebuiltEvidenceRefused` with byte-identical snapshots; `TestReceiptOtherSnapshotPremiseChangedRefused` (both `freshness_receipt_binding_mismatch`) | `TestQuietRegistryIntakeWithReceiptAccepted` with original Evidence; `TestRemintedWholeEvidenceAccepted` only after new full F admission |
+| Upfront snapshot-submission path | `TestReplacementSnapshotWithOldReceiptRefused`, `TestNonRegistrySnapshotWithRegistryReceiptRefused` (`freshness_receipt_binding_mismatch`); `TestStaleSubmittedSnapshotRefused` retains own-age refusal, never retries a refused receipt as legacy | `TestReplacementSnapshotOwnAgeSubmissionAccepted`, `TestNonRegistrySnapshotOwnAgeSubmissionAccepted` use new/current submitted bytes with no receipt; `TestCommittedSubmissionFreshnessReceiptAccepted` obtains a new receipt only after committed-head F verification |
+| Validate-only service, no fallback | `TestServiceInvalidReceiptNoFallbackRefused` (`freshness_receipt_binding_mismatch` despite current grant snapshot), `TestServiceRequiredReceiptMissingRefused` (`freshness_receipt_unavailable`); unchanged grant own-age refusal | `TestCurrentServiceWithValidReceiptAccepted`; `TestCurrentServiceWithoutReceiptAccepted` only when optional legacy mode was chosen up front; neither extends grant age |
 
 All normal/re-anchor refusal and revoked controls must assert zero plans and
 unchanged anchor/watermark. Acceptance controls must assert the exact normal
