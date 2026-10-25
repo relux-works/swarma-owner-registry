@@ -388,6 +388,74 @@ local construction budget, with no truncation or pagination. Prepared signatures
 are private candidates, not publication success. No store, witness, bridge,
 commit, custodian or exclusion transaction is implemented here.
 
+## Base snapshot candidates
+
+`internal/snapshot` constructs the registry owner's closed `revocation/1` base
+profile through `internal/journal.Signer`. `Issue` receives the protected current
+cumulative set, exact issue time, independently reconciled `Retained` base and
+checkpoint, and a fresh qualified `TimeSample`. It returns an owned private
+`Issued` candidate. Every retained key/record entry, including future-effective
+entries, must remain; an effective time may move earlier but never later.
+Duplicate entries refuse. Issue time must strictly increase; equal-time changed
+content signals `snapshot_fork`, while exact equal-time or backward issuance
+refuses `snapshot_rollback`. No idle reissue path is provided.
+
+The caller must serialize a single unresolved transition, retain its exact
+candidate inventory before external intent, and fence further issuance until
+that transition is resolved or independently recovered. These pure functions
+compare the supplied retained state; they cannot discover a withheld or rolled
+back history, serialize concurrent calls, persist a signing floor, or qualify
+bootstrap. Missing independently reconciled history refuses `snapshot_gap`;
+there is no automatic empty-state genesis. Older originals remain in the
+embedding service's complete durable inventory, never replaced by a candidate.
+
+`Build` constructs the anchored new-record entry, snapshot-add entry and signed
+checkpoint as one candidate, automatically binding the reissued snapshot ID.
+Its `Change` supplies the caller-authorized record body, witnessed anchor,
+protected cumulative set, issue/checkpoint times and validated witness. Record
+content authorization remains the intake caller's responsibility.
+
+`Prepare` receives the exact signed snapshot and caller-prepared journal proof.
+It repeats cumulative and time checks at the decision boundary, then uses only
+`journal.BuildPublication` and its pinned `VerifyJournal` admission. The proof
+must bind the witnessed prior anchor, new record entry, same-transaction snapshot
+add/revocation entry, reissued snapshot ID in the new checkpoint, and exact prior
+checkpoint lookup. Missing links are refused, never filled or repaired. Every
+pinned journal refusal is preserved. `Candidate.Publication` retains the complete
+owned proof and `Candidate.Result` its admission plan. Refusals return nil,
+exposing no plan and changing no input or retained bytes. A candidate is not
+publication success; the later adapter must atomically commit the complete
+inventory and qualify witness intent/resolution, exclusion and recovery.
+
+`TimeSample` is an explicit integration boundary for the shared qualified time
+provider, not a second collector. `Confident` must come from the protected
+uncertainty/continuity policy, with exact UTC-second `Now`, independently durable
+`Watermark`, and exclusive `AuthorityUntil`. Missing confidence/history,
+backward time or reaching the authority endpoint refuses `time_unavailable`
+before custody. Issuance cannot exceed the conservative lower time bound.
+`Prepare` constructs the verifier's time facts from this sample, replacing any
+cached Context time. Each issuance and final decision requires a fresh sample;
+there is no clock read or local fallback. Real timeconf wiring, uncertainty
+calculation, cross-process holds and final transaction revalidation remain
+separate qualification work. Legacy journal consumption keeps the snapshot's
+own age at most 60 seconds inclusive; no freshness receipt bypass is introduced.
+
+Both **64 entries** and **8192 whole signed bytes** are hard limits, preflighted
+before issuance custody. Some 64-entry sets already exceed the byte limit.
+`capacity_exhausted` returns no candidate and requires retaining the entire
+last durable set and rejected addition. `CapacityWarning` is advisory at 56
+entries or 7 KiB; it never truncates or permits exceeding either hard bound.
+`Error.Signal` marks capacity exhaustion and same-position snapshot/head forks;
+the embedding service must fence the affected domain/head, retain the original
+evidence and alert an operator. These functions do not silently select a fork,
+refresh a rejected lower set or perform operator delivery.
+
+The snapshot tests use the pinned three-entry publication fixture and its exact
+refusal controls, plus deterministic public-seed signing. The matching-gossip
+control is explicitly skipped because no authenticated gossip source exists.
+Unit candidates do not qualify durable publication, live custody, time sources,
+gossip discovery or absence of hidden publications.
+
 ## Tools
 
 Use Go 1.26.10 (module language version 1.26.0) and `gofmt`. Dependencies are
@@ -411,15 +479,15 @@ heavy-slot --label registry -- go build ./internal/store
 heavy-slot --label registry -- go test ./internal/store -timeout=2h
 heavy-slot --label registry -- go vet ./internal/store
 heavy-slot --label registry -- gofmt -w internal/store/*.go
-heavy-slot --label registry -- go build ./internal/journal
-heavy-slot --label registry -- go test ./internal/journal
-heavy-slot --label registry -- go vet ./internal/journal
-heavy-slot --label registry -- gofmt -w internal/journal/*.go
+heavy-slot --label registry -- go build ./internal/snapshot ./internal/journal
+heavy-slot --label registry -- go test ./internal/snapshot ./internal/journal
+heavy-slot --label registry -- go vet ./internal/snapshot ./internal/journal
+heavy-slot --label registry -- gofmt -w internal/snapshot/*.go internal/journal/*.go
 ```
 
 `go build` checks the selected library packages; the core `go test` command covers policy parsing,
 closed gates, role separation, dependency pins and signed intake refusals and
-positive controls; `go vet` checks those packages. Intake, enrollment and journal tests read public
+positive controls; `go vet` checks those packages. Intake, enrollment, snapshot and journal tests read public
 fixtures from the build-selected module directory returned by
 `go list -m -json github.com/relux-works/waggle` or
 `go list -m -json github.com/relux-works/swarma-registrar`, checking the exact module path,
