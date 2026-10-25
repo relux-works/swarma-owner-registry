@@ -5,8 +5,9 @@ An owner registry service for the trust node, written in Go. The accepted
 and recovery work.
 
 The first two slices implement protected contract pins, activation checks and
-a pure signed-record intake adapter. A separate local transaction store now
-provides checked durability and recovery. There is no network listener or Git/
+a pure signed-record intake adapter. A separate enrollment adapter orchestrates
+complete approved exports through a caller-qualified transaction. A local
+transaction store provides checked durability and recovery. There is no network listener or Git/
 witness publication adapter. An admission or local commit verdict is not
 publication, deployment or qualification evidence.
 
@@ -52,7 +53,7 @@ Its issuer is the pinned grant root and its binding is the protected owner.
 The intake adapter verifies signed identity, lifetime and current revocation; a
 service identity alone supplies no parent grant or action authority.
 
-`activation` is an object of optional booleans named `s4_freshness`,
+`activation` is an object of optional booleans named `enrollment_intake`, `s4_freshness`,
 `s4_verify_freshness`, `s4_reanchor`, `purpose5_runtime`, `custody`, `transport`, `time`, `witness`, `storage`,
 `freshness_history` and `consumer_migration`. Every omitted gate is closed;
 unknown names and non-booleans refuse. Only an explicit protected `true` opens
@@ -137,6 +138,74 @@ conflict verdict for the submitted record. No function reads files, accesses
 the network, journals, mutates replay state or executes effects. Callers must
 check activation dependencies and revalidate evidence/time at the later
 serialized publication boundary.
+
+## Enrollment projection orchestration
+
+`internal/enrollment` uses the pinned registrar `enrollment.Policy` and
+`registry.Loader` for complete approved signed exports. `New(Trust)` constructs
+the policy from the protected enrollment-publisher pin, canonical audience and
+independently trusted host classification. The caller supplies a protected
+`registry.Verifier` that binds every entry and its type/bytes to the exact
+reviewed signed commit under the protected commit-signer pin/maintainer allowlist,
+and verifies ancestry. This package never fetches or
+follows a branch, verifies a Git signature itself, or admits self-enrollment.
+
+The `enrollment_intake` gate defaults closed. Opening it is an owner declaration;
+`New` also refuses an absent transaction. There is no production `Transaction`
+implementation in this repository, so this adapter cannot be activated yet.
+The later witness and Git adapters need their own qualification.
+
+`Projection` supplies the full separate enrollment export ref's entries and a
+content-ID map of the exact enrollment bytes under `records/`. Only regular
+`enrollments/*.json` entries are permitted. Public Loader validation preserves
+all seven snapshot-wide phases, including reserved `sigs` before any signature
+failure and conflict before rollback. After those phases, its Store bridge
+checks complete, byte-identical mirrors before any transaction operation.
+It performs no reserialization or signing. An invalid entry refuses the whole
+load; no lower valid subset is installed.
+
+`Trust.Retained` supplies protected, independently reconciled `State`, including
+high-water and every earlier exact `Projection` in `Exports`. First use is
+explicit; missing rollback evidence is not bootstrap. Loader enforces immutable
+body/ID/sequence history and irreversible tombstones. Approved publisher rotation
+may change envelope signatures while preserving that history. Each resolved
+candidate appends its exact export revision; earlier envelope bytes remain in
+its complete transaction inventory, never overwritten by content ID alone.
+Archives are retained in full; sizing and durable retention require qualification.
+
+The bridge calls the injected transaction in order:
+
+1. `Preflight(Candidate)` validates the complete recoverable inventory/budget,
+   excludes old instances and previews the exact local durable state.
+2. `Intent(Binding)` obtains its external durable acknowledgement.
+3. `Commit(Binding)` durably commits through `internal/store` and reports the
+   exact previewed state binding.
+4. `Resolve(Binding)` verifies that commit, obtains matching resolution,
+   revalidates authority/time/bytes and publishes the resolved head.
+
+The candidate ID binds the before/after high-water, full retained exports and
+exact mirror bytes. It is a local inventory digest, separate from protocol
+witness digests. Both the candidate and previewed state IDs must match through
+commit and resolution; uncertainty, a mismatched binding or any error fences.
+The interface contract requires real durability and witness evidence from its
+qualified implementation; comparing report fields cannot authenticate them.
+
+`Load` returns a public read-only snapshot only after exact resolved success.
+Every failed load returns nil, sets a sticky `Fenced` state and prevents later
+transaction calls. The caller must stop using previously returned snapshots
+when fenced. `LastResolved` returns copied recovery evidence only: after a failed
+transaction it cannot prove that durable state was unchanged. Recovery needs a
+new instance with externally reconciled state; there is no reset method.
+Inputs and transaction candidates are copied. Typed errors expose only codes:
+`enrollment_intake_closed`, `transaction_unavailable`, `state_unavailable` for
+subsequent fenced calls, and the public Loader's unchanged enrollment/registry
+refusals. Mirror/path/transaction failures use `registry_unavailable`.
+
+Tests use build-selected public registrar fixtures and a test-only transaction
+double. They check ordering, exact bindings, whole-load refusal, history,
+rotation/archive retention and sticky fencing. They do not qualify Git approval,
+local crash durability, witness transport or recovery. No in-memory successful
+transaction implementation is shipped in production.
 
 ## Local transaction storage
 
@@ -323,10 +392,10 @@ cache directory, and put the selected Go toolchain on `PATH`. On a shared host,
 run Go commands through the installed scheduling wrapper:
 
 ```sh
-heavy-slot --label registry -- go build ./internal/intake ./internal/pins ./internal/contracts
-heavy-slot --label registry -- go test ./internal/intake ./internal/pins ./internal/contracts
-heavy-slot --label registry -- go vet ./internal/intake ./internal/pins ./internal/contracts
-heavy-slot --label registry -- gofmt -w internal/contracts/*.go internal/pins/*.go internal/intake/*.go
+heavy-slot --label registry -- go build ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
+heavy-slot --label registry -- go test ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
+heavy-slot --label registry -- go vet ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
+heavy-slot --label registry -- gofmt -w internal/enrollment/*.go internal/contracts/*.go internal/pins/*.go internal/intake/*.go
 heavy-slot --label registry -- go build ./internal/store
 heavy-slot --label registry -- go test ./internal/store -timeout=2h
 heavy-slot --label registry -- go vet ./internal/store
@@ -339,9 +408,10 @@ heavy-slot --label registry -- gofmt -w internal/journal/*.go
 
 `go build` checks the selected library packages; the core `go test` command covers policy parsing,
 closed gates, role separation, dependency pins and signed intake refusals and
-positive controls; `go vet` checks those packages. Intake and journal tests read public
+positive controls; `go vet` checks those packages. Intake, enrollment and journal tests read public
 fixtures from the build-selected module directory returned by
-`go list -m -json github.com/relux-works/waggle`, checking the exact module path,
+`go list -m -json github.com/relux-works/waggle` or
+`go list -m -json github.com/relux-works/swarma-registrar`, checking the exact module path,
 reviewed version and absence of replacements. Standard Go configuration,
 including a `GOENV`-only `GOMODCACHE`, is supported; missing fixtures fail closed.
 Run `heavy-slot --label registry -- go mod download all` to populate the selected

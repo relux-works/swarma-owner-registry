@@ -56,6 +56,7 @@ func Roles() []Role {
 type Gate string
 
 const (
+	EnrollmentIntake  Gate = "enrollment_intake"
 	Freshness         Gate = "s4_freshness"
 	VerifyFreshness   Gate = "s4_verify_freshness"
 	Reanchor          Gate = "s4_reanchor"
@@ -70,7 +71,7 @@ const (
 )
 
 func Gates() []Gate {
-	return []Gate{Freshness, VerifyFreshness, Reanchor, Purpose5Runtime, Custody, Transport, Time, Witness, Storage, FreshnessHistory, ConsumerMigration}
+	return []Gate{EnrollmentIntake, Freshness, VerifyFreshness, Reanchor, Purpose5Runtime, Custody, Transport, Time, Witness, Storage, FreshnessHistory, ConsumerMigration}
 }
 
 // Pin uses local policy labels; purpose-5 becomes integer purpose 5 in the
