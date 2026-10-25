@@ -115,6 +115,7 @@ type retained struct {
 	Sequence         uint64
 }
 type image struct {
+	Format          string
 	Sequence        uint64
 	Head, Watermark string
 	Files           map[string]string
@@ -146,7 +147,10 @@ func budget(o Options) uint64 {
 }
 func byteID(b []byte) string { return fmt.Sprintf("sha256:%x", sha256.Sum256(b)) }
 
-func genesis() image { return image{Files: map[string]string{}, Requests: map[string]retained{}} }
+// The immutable anchor binds the local format into every descendant state ID.
+func genesis() image {
+	return image{Format: "delta-1", Files: map[string]string{}, Requests: map[string]retained{}}
+}
 func canonical(v any) []byte {
 	b, e := json.Marshal(v)
 	if e != nil {

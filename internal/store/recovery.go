@@ -216,6 +216,7 @@ func (s *Store) Reconcile(expectedStateID string) error {
 	}
 	byBase := map[string]string{}
 	ids := map[string]bool{}
+	presentBlobs := map[string]bool{}
 	blobs := map[string]bool{}
 	for _, p := range paths {
 		if strings.HasPrefix(p, "blobs/") && strings.HasSuffix(p, ".blob") {
@@ -223,7 +224,7 @@ func (s *Store) Reconcile(expectedStateID string) error {
 			if !validID(id) || s.disk.verify(p, id) != nil {
 				return fail()
 			}
-			blobs[id] = true
+			presentBlobs[id] = true
 		}
 		if !strings.HasPrefix(p, "transactions/") || !strings.HasSuffix(p, ".json") {
 			continue
@@ -262,7 +263,7 @@ func (s *Store) Reconcile(expectedStateID string) error {
 		if err != nil || expected.Files == nil {
 			return fail()
 		}
-		want, _ := delta(stateID, expected, r)
+		want, referenced := delta(stateID, expected, r)
 		if !bytes.Equal(canonical(want), canonical(m)) {
 			return fail()
 		}
@@ -270,10 +271,14 @@ func (s *Store) Reconcile(expectedStateID string) error {
 		if e != nil || !bytes.Equal(outcomeBytes, canonical(outcomeRef(out))) {
 			return fail()
 		}
-		for _, blob := range m.Files {
-			if !blobs[blob] {
+		// A valid hash establishes byte integrity, not inventory membership.
+		// Only this verified delta's request, outcome and payload references
+		// admit blobs, including the normalized empty outcome result.
+		for blob := range referenced {
+			if !presentBlobs[blob] {
 				return fail()
 			}
+			blobs[blob] = true
 		}
 		// Transfer only the folded digest indexes; the bounded payloads are released.
 		next = fold(next, expected)

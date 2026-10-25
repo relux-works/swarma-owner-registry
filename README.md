@@ -179,7 +179,7 @@ The on-disk format is local recovery state, not a public record schema:
 
 | Path | Contents |
 | --- | --- |
-| `anchor.json` | Immutable explicitly created empty baseline |
+| `anchor.json` | Immutable explicitly created empty baseline with local `Format: "delta-1"` marker |
 | `transactions/<state-id>.json` | Append-only delta: base ID, next sequence/head/watermark, this request's path-to-blob digests and retained request/outcome references |
 | `blobs/<digest>.blob` | Immutable exact byte payloads and local request/outcome reference encodings; received bundles and result bytes are independent blobs, deduplicated by exact-byte digest |
 | `records/<type-dir>/<content-id>.json` | Exact caller bytes; six compiled kinds map `/1` to `-1`, for example `grant-1`; IDs are `sha256:` plus 64 lowercase hex digits |
@@ -192,11 +192,15 @@ Recovery verifies and folds the chain from the anchor; later deltas never repeat
 old payloads or full images. A request reference preserves all arguments,
 including nil versus empty byte slices, while each payload is stored once by
 its own digest. Materialized record/journal/checkpoint paths are additional exact
-copies for their existing read layout. Valid unreferenced blobs may survive
-interrupted work and are retained and charged, but confer no authority. Unknown
-manifests or staging owners fence. No history, blob or pending fragment is
-rewritten or garbage-collected. This local delta format does not automatically
-convert older full-image formats; incompatible evidence fences and stays intact.
+copies for their existing read layout. Only blobs referenced by the verified
+delta fold are admitted, including a pending candidate when recovery verifies
+and resolves its manifest. Any extra blob fences Open and Reconcile even if its
+digest matches; its bytes stay intact. Unknown manifests or staging owners also
+fence. No history, blob or pending fragment is rewritten or garbage-collected.
+The anchor's `delta-1` marker is bound into the predecessor chain. Missing or
+unknown markers fence, including empty older roots without a `blobs/` directory.
+There is no automatic conversion of unversioned or older full-image formats;
+incompatible evidence stays intact.
 
 A commit audits all authoritative bytes and namespace entries, prepares only its
 delta, then writes the durable manifest, immutable blobs, exact materialized
@@ -224,8 +228,8 @@ not constant-time throughput or physical-filesystem durability.
 
 `CreateWithOptions` and `OpenWithOptions` accept `Options{MaxBytes: ...}`. Zero
 selects the default **1 GiB local logical regular-file byte budget**. Preflight
-charges all existing regular bytes, including retained fragments/unreferenced
-blobs, plus every new blob/materialized path, the new delta and a complete
+charges all existing regular bytes, including retained fragments, plus every
+new blob/materialized path, the new delta and a complete
 replacement `CURRENT`. Counting both old and staging `CURRENT` is conservative:
 success leaves one pointer-sized reserve. The check precedes intent, mkdir or
 any write; refusal is `capacity_exhausted` with no tree change. Exact retries
