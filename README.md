@@ -5,9 +5,10 @@ An owner registry service for the trust node, written in Go. The accepted
 and recovery work.
 
 The first two slices implement protected contract pins, activation checks and
-a pure signed-record intake adapter. There is no network listener or storage
-implementation. An admission verdict is not publication, deployment or
-qualification evidence.
+a pure signed-record intake adapter. A separate local transaction store now
+provides checked durability and recovery. There is no network listener or Git/
+witness publication adapter. An admission or local commit verdict is not
+publication, deployment or qualification evidence.
 
 ## Packages and protected configuration
 
@@ -133,6 +134,67 @@ the network, journals, mutates replay state or executes effects. Callers must
 check activation dependencies and revalidate evidence/time at the later
 serialized publication boundary.
 
+## Local transaction storage
+
+`internal/store` is a Linux local-filesystem implementation of `Transactions`.
+It uses standard-library syscalls and the existing pinned packages; there are no
+new dependencies. `Create` explicitly bootstraps an existing empty private
+(mode 0700) directory. `Open` never bootstraps missing state. A lifetime directory
+lock excludes cooperating local opens, and a mutex serializes all API readers
+and the single writer; neither proves old-instance exclusion or clone safety.
+
+`Preview` validates a request and returns its candidate state ID without writing
+or reserving a sequence. `Commit` repeats the checks under serialization, then
+returns an owned `Outcome`. The caller must retain the preview's expected state
+ID independently before intent: `Open(root, expectedStateID)` and
+`Reconcile(expectedStateID)` require the exact expected latest candidate. A
+missing candidate, fork, incomplete manifest, unsafe path or mismatched expected
+state stays fenced. Disk evidence alone cannot detect complete loss or rollback.
+The later witness adapter must supply that independent recovery authority.
+
+`Request` carries protected principal/request ID, operation, expected/current head,
+watermark, exact record bytes, opaque journal/checkpoint bytes and opaque outcome.
+Record signatures, authority, journal construction, time qualification and external
+resolution remain the caller's responsibilities. A new transaction allocates one
+positive sequence through 9007199254740991. Under the lock, changed retained
+arguments refuse `request_conflict`, a different expected head refuses
+`head_conflict`, and exhausted sequence capacity refuses `capacity_exhausted`, in
+that order before reservation. An exact retry returns its retained outcome even
+when later heads exist; it appends nothing and renews no authority. Same content
+ID/different bytes refuses `envelope_conflict`, preserving the original evidence.
+
+The on-disk layout is local recovery state, not a new public record schema:
+
+| Path | Contents |
+| --- | --- |
+| `anchor.json` | Immutable explicitly created empty baseline |
+| `transactions/<state-id>.json` | Immutable manifest binding base/candidate IDs, a complete candidate image of exact bytes/outcomes, watermark and next head |
+| `records/<type-dir>/<content-id>.json` | Exact caller bytes; the six compiled kinds map `/1` to `-1` (for example `grant-1`); IDs are exactly `sha256:` plus 64 lowercase hex digits |
+| `journal/<seq>.json`, `checkpoints/<seq>.json` | Exact opaque bytes, with 16-digit zero-padded positive decimal positions |
+| `CURRENT` | The single locally resolved state ID, replaced last |
+| `.tmp-*` in those directories | Retained pending fragments; never authoritative reader inputs |
+
+A commit checks the entire tree, prepares an owned complete image, then writes
+its recoverable manifest, exact files and finally `CURRENT`. Each new file uses a
+checked full write, file fsync, checked close, same-directory atomic rename and
+directory fsync. Component-relative no-follow opens reject links, special files
+and traversal. Any durability error or uncertainty fences readers and writers as
+`state_unavailable`. Reconciliation checks the entire retained lineage against
+the protected expected ID, reconstructs only exact complete candidates and
+re-establishes file/directory durability before exposing them. Missing referenced
+files never become empty reads. Manifests, earlier bytes and pending fragments
+are retained; there is no garbage collection. Complete images deliberately trade
+space and recovery cost for a simple auditable baseline; they copy retained
+history, and are not a large-registry performance qualification.
+
+`Preflight` independently enforces the full received bundle's 2 MiB bound,
+J's 64 entries/two checkpoints/540,672 bytes, F's 64 publications/one checkpoint/
+532,480 bytes and 64 queried IDs/keys, per-record 8,192-byte/depth-16 bounds, and
+the whole WS wrapper's 8,192 bytes including LF. All such refusals happen before
+any intent or filesystem write. The caller supplies the entire received carrier;
+these are budget/shape checks, not proof authentication or WS transport support.
+No complete proof is truncated to fit a carrier.
+
 ## Tools
 
 Use Go 1.26.10 (module language version 1.26.0) and `gofmt`. Dependencies are
@@ -149,9 +211,13 @@ heavy-slot --label registry -- go build ./internal/intake ./internal/pins ./inte
 heavy-slot --label registry -- go test ./internal/intake ./internal/pins ./internal/contracts
 heavy-slot --label registry -- go vet ./internal/intake ./internal/pins ./internal/contracts
 heavy-slot --label registry -- gofmt -w internal/contracts/*.go internal/pins/*.go internal/intake/*.go
+heavy-slot --label registry -- go build ./internal/store
+heavy-slot --label registry -- go test ./internal/store
+heavy-slot --label registry -- go vet ./internal/store
+heavy-slot --label registry -- gofmt -w internal/store/*.go
 ```
 
-`go build` checks the three library packages; `go test` covers policy parsing,
+`go build` checks the selected library packages; the core `go test` command covers policy parsing,
 closed gates, role separation, dependency pins and signed intake refusals and
 positive controls; `go vet` checks those packages. Intake tests read public
 fixtures from the build-selected module directory returned by
@@ -161,6 +227,16 @@ including a `GOENV`-only `GOMODCACHE`, is supported; missing fixtures fail close
 Run `heavy-slot --label registry -- go mod download all` to populate the selected
 cache when needed.
 Build/module artifacts go to the configured caches, tests report to stdout and
-formatting updates source files. There is no executable binary or generated
-service state. The scheduling wrapper serializes shared-host work; it is not a
+formatting updates source files. The build produces no executable binary; only
+storage API calls or temporary storage tests create local state. The scheduling
+wrapper bounds shared-host work; it is not a
 runtime dependency of the library packages.
+
+Storage tests use only disposable temporary directories. They cover conflict
+precedence, exact retries, unsafe paths, no-write preflight refusals, each checked
+I/O failure, partial writes, and crashes at every commit boundary, including a
+bounded directory-durability model. Package-private fault hooks are unavailable
+to production callers. The power-loss model and local locks do not qualify a
+filesystem, witness, Git adapter, service startup or external publication. Build
+and vet produce no persistent output; place redirected test logs and coverage
+reports in a disposable workspace scratch directory.
