@@ -57,6 +57,8 @@ type Gate string
 
 const (
 	Freshness         Gate = "s4_freshness"
+	VerifyFreshness   Gate = "s4_verify_freshness"
+	Reanchor          Gate = "s4_reanchor"
 	Purpose5Runtime   Gate = "purpose5_runtime"
 	Custody           Gate = "custody"
 	Transport         Gate = "transport"
@@ -68,7 +70,7 @@ const (
 )
 
 func Gates() []Gate {
-	return []Gate{Freshness, Purpose5Runtime, Custody, Transport, Time, Witness, Storage, FreshnessHistory, ConsumerMigration}
+	return []Gate{Freshness, VerifyFreshness, Reanchor, Purpose5Runtime, Custody, Transport, Time, Witness, Storage, FreshnessHistory, ConsumerMigration}
 }
 
 // Pin uses local policy labels; purpose-5 becomes integer purpose 5 in the

@@ -41,7 +41,7 @@ func validDocument() map[string]any {
 		roles[string(role)] = map[string]any{"key": testKey(byte(i + 1)), "purpose": purposes[i], "scope": scope}
 	}
 	return map[string]any{
-		"revision": "9b42338b8a57d12a21da4db4375b269deacdd6bf", "owner": "owner-a", "roles": roles,
+		"revision": "f76a400ebeb599b95a9bf9b2c59b522bef0392d8", "owner": "owner-a", "roles": roles,
 		"record_types":    []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"},
 		"key_classes":     []any{"agent", "operator-device", "service"},
 		"service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)},
@@ -144,7 +144,7 @@ func TestForeignPurpose5DomainRefused(t *testing.T) {
 	codeIs(t, c.CheckPurpose5(p.Key, 4), pins.Purpose5Scope)
 }
 
-// Unknown classes and revisions are rejected beside a valid S3/class control.
+// Unknown classes and revisions are rejected beside a valid pinned/class control.
 func TestUnknownClassAndRevisionRefused(t *testing.T) {
 	c := accepted(t, validDocument())
 	if err := c.CheckProfile("attestation/1", "service"); err != nil {
@@ -251,7 +251,7 @@ func TestClosedGateRefused(t *testing.T) {
 	refused(t, wire(t, d), pins.ConfigMalformed)
 }
 
-// Valid complete S3 pins accept configured type/class membership while every omitted gate remains closed.
+// The original S3 service surface stays accepted under the current pin, with every omitted gate closed.
 func TestPinnedS3ProfileAccepted(t *testing.T) {
 	if !reflect.DeepEqual(pins.Roles(), requiredRoles) {
 		t.Fatal("required role registry changed")
@@ -374,4 +374,49 @@ func TestInvalidPolicyEncodingRefused(t *testing.T) {
 	d = validDocument()
 	d["owner"] = strings.Repeat("a", 256)
 	refused(t, wire(t, d), pins.ConfigMalformed)
+}
+
+// A complete old S3 configuration is refused rather than running one revision while declaring another.
+func TestS3PinCannotAdmitFreshness(t *testing.T) {
+	d := validDocument()
+	d["revision"] = "9b42338b8a57d12a21da4db4375b269deacdd6bf"
+	refused(t, wire(t, d), pins.RevisionUnsupported)
+	d["revision"] = "f76a400ebeb599b95a9bf9b2c59b522bef0392d8"
+	accepted(t, d)
+}
+
+// Complete S4 pins default every gate closed; explicit booleans open only the selected S4 dependency.
+func TestPinnedS4ProfileAccepted(t *testing.T) {
+	d := validDocument()
+	d["revision"] = "f76a400ebeb599b95a9bf9b2c59b522bef0392d8"
+	c := accepted(t, d)
+	for _, g := range pins.Gates() {
+		if c.IsOpen(g) {
+			t.Fatalf("default gate open: %s", g)
+		}
+		codeIs(t, c.Require(g), pins.GateClosed)
+	}
+	for _, selected := range []pins.Gate{pins.Freshness, pins.Gate("s4_verify_freshness"), pins.Gate("s4_reanchor")} {
+		for _, enabled := range []bool{false, true} {
+			d["activation"] = map[string]any{string(selected): enabled}
+			c = accepted(t, d)
+			for _, g := range pins.Gates() {
+				want := g == selected && enabled
+				if c.IsOpen(g) != want {
+					t.Fatalf("gate %s widened by %s", g, selected)
+				}
+				if want {
+					if err := c.Require(g); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					codeIs(t, c.Require(g), pins.GateClosed)
+				}
+			}
+		}
+		for _, invalid := range []any{"true", int64(1), nil} {
+			d["activation"] = map[string]any{string(selected): invalid}
+			refused(t, wire(t, d), pins.ConfigMalformed)
+		}
+	}
 }

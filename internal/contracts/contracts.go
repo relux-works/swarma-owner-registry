@@ -1,10 +1,10 @@
-// Package contracts freezes the reviewed S3 service surface, not runtime admission.
+// Package contracts freezes the reviewed S4 service surface, not runtime admission.
 package contracts
 
-const Revision = "9b42338b8a57d12a21da4db4375b269deacdd6bf"
+const Revision = "f76a400ebeb599b95a9bf9b2c59b522bef0392d8"
 
-// RecordTypes returns a copy of the service's supported S3 types. Message/act
-// intake and future freshness formats are outside this service surface.
+// RecordTypes returns a copy of the service's closed record types. Message/act
+// intake and registry-internal freshness publication are outside this list.
 func RecordTypes() []string {
 	return []string{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}
 }

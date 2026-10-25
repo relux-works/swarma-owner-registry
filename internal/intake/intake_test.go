@@ -24,7 +24,7 @@ import (
 
 const (
 	modulePath    = "github.com/relux-works/waggle"
-	moduleVersion = "v0.0.0-20261024213811-9b42338b8a57"
+	moduleVersion = "v0.0.0-20261024235202-f76a400ebeb5"
 )
 
 type fixtureModule struct {
@@ -211,7 +211,7 @@ func load(t *testing.T, name string) sample {
 		}
 		roles[string(r)] = map[string]any{"key": k, "purpose": purposes[r], "scope": scope}
 	}
-	s.document = map[string]any{"revision": "9b42338b8a57d12a21da4db4375b269deacdd6bf", "owner": "owner-a", "roles": roles, "record_types": []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}, "key_classes": []any{"agent", "operator-device", "service"}, "service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)}}
+	s.document = map[string]any{"revision": "f76a400ebeb599b95a9bf9b2c59b522bef0392d8", "owner": "owner-a", "roles": roles, "record_types": []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}, "key_classes": []any{"agent", "operator-device", "service"}, "service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)}}
 	s.config = config(t, s.document)
 	return s
 }
@@ -611,7 +611,7 @@ func TestExactByteBinding(t *testing.T) {
 	check(t, s, "envelope_conflict")
 }
 
-// The current S3 profile refuses stale and rollback-unsafe evidence without a historical-issuance bypass.
+// The current pinned profile refuses stale and rollback-unsafe evidence without a historical-issuance bypass.
 func TestSnapshotCurrencyRefused(t *testing.T) {
 	s, _ := syntheticService(t)
 	check(t, s, "accept")

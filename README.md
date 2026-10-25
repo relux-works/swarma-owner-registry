@@ -11,12 +11,12 @@ qualification evidence.
 
 ## Packages and protected configuration
 
-`internal/contracts` freezes the reviewed S3 revision
-`9b42338b8a57d12a21da4db4375b269deacdd6bf`, six service-supported record types
+`internal/contracts` freezes the reviewed S4 revision
+`f76a400ebeb599b95a9bf9b2c59b522bef0392d8`, six service-supported record types
 (`attestation/1`, `grant/1`, `revocation/1`, `enrollment/1`, `journal-entry/1`,
 `checkpoint/1`), three key classes (`agent`, `operator-device`, `service`) and
 the exact D33 grant-service profile. `message/1` and `operator-act/1` have no
-standalone intake profile here. `freshness/1` needs a later reviewed revision.
+standalone intake profile here. `freshness/1` exists in S4 only for internal registry publication; it has no intake path.
 
 `internal/pins.Parse` accepts caller-protected CCJ-1 JSON, at most 16 KiB and
 eight container levels. It uses the pinned `record.Parse` and registrar `ccj`
@@ -52,11 +52,13 @@ The intake adapter verifies signed identity, lifetime and current revocation; a
 service identity alone supplies no parent grant or action authority.
 
 `activation` is an object of optional booleans named `s4_freshness`,
-`purpose5_runtime`, `custody`, `transport`, `time`, `witness`, `storage`,
+`s4_verify_freshness`, `s4_reanchor`, `purpose5_runtime`, `custody`, `transport`, `time`, `witness`, `storage`,
 `freshness_history` and `consumer_migration`. Every omitted gate is closed;
 unknown names and non-booleans refuse. Only an explicit protected `true` opens
 that gate. An open gate records an owner declaration, not measured qualification,
-and cannot expand the compiled S3 record/profile registry.
+and cannot expand the compiled record/profile registry. The three S4 gates
+respectively declare publication, freshness verification and re-anchor readiness;
+opening one leaves the others closed and implements none of those later slices.
 
 The immutable `Config` exposes:
 
@@ -65,7 +67,7 @@ The immutable `Config` exposes:
   signatures or activation dependencies.
 - `CheckPurpose5`: exact requested root and purpose against the protected scope.
 - `IsOpen` and `Require`: gate queries and typed closed-gate refusals.
-- `VerifierContext`: a fresh immutable snapshot of static S3 pins only. Signed,
+- `VerifierContext`: a fresh immutable snapshot of static S4 pins only. Signed,
   time, generation and witness evidence remain unavailable. Consumers must
   enforce their dependent gates and supply qualified evidence separately.
 
@@ -79,7 +81,7 @@ code; caller bytes and external state remain unchanged.
 `*Accepted` or a typed `*intake.Error` containing only its refusal code. Its
 closed types are `attestation/1` (agent, operator-device and D33 service),
 `grant/1` and `revocation/1`. Enrollment, journal/checkpoint, message, act,
-contact and future freshness records have no intake path in this slice.
+contact and registry-internal freshness records have no intake path in this slice.
 The selected type fixes the byte limit before parsing and must match the body.
 
 `Facts` supplies current time/watermark, audience, generations, exact signed

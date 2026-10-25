@@ -36,9 +36,9 @@ S4 at `f76a400ebeb599b95a9bf9b2c59b522bef0392d8` is merged and
 adds freshness/1, D39 journal narrowing, D40 state/read bounds and D41 explicit
 re-anchor to S3's journal/checkpoint contracts. F §§2.7, 2.9, 6–7 and D38–D41
 are the public sources for the requirements below. Content approval and landing
-do not activate this service or qualify consumers. The code module remains at
-S3 `9b42338b8a57d12a21da4db4375b269deacdd6bf`; §11 plans a separate
-S4 dependency/profile re-pin before implementation uses these new entry points.
+do not activate this service or qualify consumers. The code module is pinned to
+S4 `f76a400ebeb599b95a9bf9b2c59b522bef0392d8` by §11's dependency/profile
+re-pin slice; new entry-point implementations and their activation stay gated.
 S5 will supply the approved freshness-receipt composition path (§5.3); its API
 is not part of the merged S4 surface.
 
