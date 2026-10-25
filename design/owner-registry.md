@@ -833,6 +833,12 @@ retain both verified originals and signal. A lower candidate is rollback
 WS:spec/witness-service.md:334–367,380–411;
 WC:spec/wire-v1.md:113–117; WC:UNRESOLVED_QUESTIONS.md:32–34).
 
+Pre-intent genesis and historical-checkpoint verification remain external WC1
+G31 qualification dependencies. Checkpoint wrapper decoding is not verification;
+never fabricate JournalWitness facts to satisfy a pre-intent verification
+dependency (OR:design/owner-registry.md:766–780;
+WC:UNRESOLVED_QUESTIONS.md:39; WC:spec/wire-v1.md:113–117).
+
 The registry writer has **no witness append credential or append permission**.
 The separate witness-side bridge validates complete recoverable candidate
 inventory, not a writer digest, and appends only its provisioned registry stream.
