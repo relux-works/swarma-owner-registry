@@ -150,7 +150,7 @@ func refusedResult(t *testing.T, r verifier.Result, want string) {
 func errorCode(t *testing.T, e error, want Code) {
 	t.Helper()
 	var typed *Error
-	if !errors.As(e, &typed) || typed.Code != want || e.Error() != string(want) {
+	if !errors.As(e, &typed) || typed == nil || typed.Code != want || e.Error() != string(want) {
 		t.Fatalf("want %s, got %v", want, e)
 	}
 }

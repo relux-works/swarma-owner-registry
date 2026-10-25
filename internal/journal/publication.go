@@ -89,7 +89,7 @@ func BuildPublication(c verifier.Context, s Signer, p Publication) (Prepared, ve
 	}
 	candidate, e := BuildCheckpoint(p.CheckpointBody, "", s)
 	if e != nil {
-		if typed, ok := e.(*Error); ok {
+		if typed, ok := e.(*Error); ok && typed != nil {
 			switch typed.Code {
 			case Malformed, ProfileRefused, SignerUnavailable, SignerInvalid, Rollback:
 				return refuse(string(typed.Code))
