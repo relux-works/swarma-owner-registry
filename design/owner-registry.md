@@ -906,14 +906,14 @@ never commits an operation. The provider owns every consumed bound, in-flight
 observation and hold, including failed operations; admitted registry state alone
 cannot reconstruct that history.
 
-The registry also retains its required own durable watermark, at least the
-previous decision's effective upper bound, and boot identity outside rollback
+The registry also retains its required own durable decision floor `J`, at least
+the previous decision's effective upper bound, and boot identity outside rollback
 before acknowledging its decision (T, durable continuity). Neither history
 replaces or resets the other. The registry's admitted-plan watermark still
 follows F's min/max rules and atomic publication requirements. Do not map newly
 consumed `continuity.high_water` directly to a point-time input's prior
-`Watermark`. Existing snapshot `TimeSample` and freshness `Input` types are local
-integration inputs, not qualified receipts or complete interval projections.
+`Watermark`. Snapshot and freshness inputs remain local integration projections,
+not authenticated qualified receipts or complete receipt bindings.
 
 The adapter preserves original nanosecond facts and checks their predicates.
 Any coarser representation rounds lower interval bounds downward, upper bounds
@@ -922,6 +922,22 @@ converted predicates must also pass. Conversion may add refusals but never turn
 an original refusal into acceptance. Reject overflow, unrepresentable values or
 an unusable converted interval. `O` alone cannot replace `[L,U]`. The complete
 interval-aware mapping is a gate before any activation (§11, row 6a).
+
+Registry projection. For every issuance and self-check the registry derives,
+from one bound interval and its own retained state: `issued_at = floor(L)`;
+verifier `Now = ceil(U)`; verifier `Watermark = max(W_prior, floor(L))`, where
+`W_prior` is this registry's prior admitted-plan watermark, never the provider's
+`prior_high_water` or `high_water`. F's `low = min(Now, Watermark)` and
+`high = max(Now, Watermark)` then cover
+`[max(W_prior, floor(L)), ceil(U)]`: the no-future check uses the low end and the
+age check uses the high end. The decision also requires `ceil(U) < floor(A)`
+and `floor(L) > J` with `J` rounded up, in addition to the nanosecond predicates
+`U < A` and `L > max(W, J)`. After an acknowledged decision the registry retains
+`J = ceil(U)` and admitted-plan watermark `max(W_prior, floor(L))`. `issued_at`
+must also be strictly greater than the previous accepted `issued_at`; equality
+refuses. With `δ ≥ 1` second a valid sequence never reaches that refusal, but
+the check stays. A `W_prior` greater than `ceil(U)` refuses rather than moving
+time backward.
 
 A new process must recover the consumed bound, hold and any in-flight marker;
 its new lower bound must be strictly after every retained previous `P+δP`.
@@ -979,7 +995,7 @@ No production activation follows from mocks or two implementations agreeing.
 | 4. Enrollment projection | `TestInvalidMirrorFencesWholeLoad`, `TestUnapprovedCommitRefused`, `TestTombstoneHistoryCannotDisappear`, `TestReservedSigsWinsSnapshotWide` | `TestOfflineEnrollmentSignedCommitAccepted`; unchanged P/R and approved E1 rotation. |
 | 5. Journal/witness proof | `TestWriterCannotAppendWitness`, `TestStaleChallengeRefused`, `TestUnresolvedIntentFences`, `TestRestoredCloneCannotServe`, `TestSameHeadCheckpointForkRefused`, `TestAdvancingAnchorMissingRefused`, `TestAnchorTimeRegressionRefused`, `TestCheckpointTimeRegressionRefused`, `TestEightFieldProjectionRefused`, `TestPublicationLinkLossRefused`, `TestIntentOnlyPublicationRefused`, `TestDelayedProofExpiredRefused` | `TestExactIntentCommitResolution`, `TestLostResolutionReceiptFreshHead`, `TestAnchoredSuffixAccepted`, `TestValidatedProjectionReduced`, `TestPublicationBundleVerifiedAtIssue`; real ACL/crash/custodian/exclusion qualification, archive is not a current receipt. |
 | 6. Base snapshots/time/capacity | `TestHeadChangeStaleSnapshotRefused`, `TestHeadChangeOldSnapshotRefRefused`, `TestHeadChangeMissingRecordRefused`, `TestHeadChangeMissingReissueRefused`, `TestHeadChangeMissingPriorCheckpointRefused`, `TestHeadChangeWrongPriorCheckpointRefused`, `TestStaleSnapshotRefused`, `TestEqualIssueTimeDifferentBytesRefused`, `TestCumulativeRemovalRefused`, `TestGapRefused`, `TestSplitHeadSignalsAndRefuses`, `TestSnapshotCapacitySignalsWithoutDrop`, `TestTimeLossNoPublication` | `TestHeadChangeReissueAccepted` (P-JRN-publish-reissue at F), `TestFreshCompleteSnapshotAccepted`, `TestConsumerAgeBoundary`, `TestMatchingGossipHeadAccepted`; identical cumulative set reissued at greater issued_at, same-transaction add/revocation/1 entry and new checkpoint snapshot reference; issuer profiles, byte/count limits and provider qualification. |
-| 6a. Interval-aware time adapter before any activation | `TestPointTimeViewCannotAccept` (`O=100`, `δ=1`, `A=101` refuses because `U=A`), `TestConsumedHighWaterNotPriorWatermark`, `TestCoarseRoundingNeverAccepts` | `TestIntervalReceiptAccepted`; complete bound receipt with `L`, `U`, exclusive `A`, boot and sample id, native operation/challenge binding, distinct provider history and consumer watermark, conservative rounding with original and converted predicates (§9). Planned qualification gate, not implemented by the point-time inputs in slices 6/7. |
+| 6a. Interval-aware time adapter before any activation | `TestPointTimeViewCannotAccept` (`O=100`, `δ=1`, `A=101` refuses because `U=A`), `TestConsumedHighWaterNotPriorWatermark`, `TestCoarseRoundingNeverAccepts` | `TestIntervalReceiptAccepted`; complete bound receipt with `L`, `U`, exclusive `A`, boot and sample id, native operation/challenge binding, distinct provider history and consumer watermark, conservative rounding with original and converted predicates (§9). This slice implements the pure interval projection for slices 6/7. The timeconf adapter, complete receipt validation and operation/challenge binding remain planned qualification gates. |
 | 7. S4 publisher/currentness after re-pin | `TestFreshnessMissingRefused`, `TestFreshnessStaleRefused`, `TestFreshnessWrongRootRefused`, `TestFreshnessWrongSnapshotRefused`, `TestFreshnessWrongHeadRefused`, `TestFreshnessSameSeqDifferentBindingRefused`, `TestFreshnessBackwardSeqRefused`, `TestFreshnessBackwardTimeRefused`, `TestFreshnessPredecessorMissingRefused`, `TestFreshnessHeadRaceRefused`, `TestFreshnessUnresolvedIntentRefused`, `TestSlowWitnessClosesFreshness`, `TestFreshnessHistoryOmissionRefused`, `TestRestoredFreshnessStateFences`, `TestOldS3RejectsAgedBase`, `TestFreshnessCannotReviveAuthority` | `TestFreshnessKeepsJournalHead`, `TestRealChangeUsesWitnessTransaction`, `TestAgedBaseAcceptedByVerifyFreshness`, `TestFreshnessAtomicRetry`; identical base bytes and unchanged registry/witness positions on healthy freshness; exact effects and boundaries verified, never a global old-verifier waiver. |
 | 7a. S5 receipt composition before K3/D12 | `TestReceiptWrongBindingRefused`, `TestReceiptAtExpiryRefused`, `TestReceiptExtensionRefused`, `TestReceiptAfterRestartRefused`, `TestNonFreshnessReceiptIssuerRefused`, `TestLegacyOldBaseCompositionRefused` | `TestFreshnessReceiptCompositionAccepted`, `TestCurrentSnapshotLegacyCompositionAccepted`; merged S5 producers return `Result.FreshnessReceipt`, used via Context after admitted-plan persistence; exclusive fixed expiry, R1–R3 and origin-only audit; row 1b re-pin and adapter qualification remain gates. |
 | 7b. Registry intake S5 and D42 activation | `TestQuietRegistryIntakeWithoutReceiptRefused`, `TestQuietRegistryIntakeRebuiltEvidenceRefused`, `TestRegistryIntakeWitnessUnavailableRefused`, `TestStaleGrantSnapshotWithRegistryReceiptRefused` | `TestQuietRegistryIntakeWithReceiptAccepted` (more than 60 seconds of quiet, same Evidence), `TestReissuedRegistryIntakeEvidenceAccepted`, `TestCurrentGrantSnapshotWithRegistryReceiptAccepted`; planned retaining adapter after row 1b, same whole Evidence across genuine clock updates, domain-specific submission and unchanged external-root age/D42 gate; no effects on refusal. |
