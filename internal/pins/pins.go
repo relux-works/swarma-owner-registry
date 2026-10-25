@@ -80,10 +80,11 @@ type Pin struct{ Key, Purpose, Scope string }
 
 // Config is immutable after Parse. Its zero value and nil pointer are closed.
 type Config struct {
-	valid bool
-	owner string
-	roles map[Role]Pin
-	gates map[Gate]bool
+	valid        bool
+	owner        string
+	objectFormat string
+	roles        map[Role]Pin
+	gates        map[Gate]bool
 }
 
 // Parse accepts bounded duplicate-free CCJ-1 through the reviewed record reader.
@@ -98,7 +99,11 @@ func Parse(raw []byte) (*Config, error) {
 		return nil, refused(ConfigMalformed)
 	}
 	m, ok := value.(map[string]any)
-	if !ok || !shape(m, "revision owner roles record_types key_classes service_profile", "activation") {
+	if !ok || !shape(m, "revision owner object_format roles record_types key_classes service_profile", "activation") {
+		return nil, refused(ConfigMalformed)
+	}
+	objectFormat, ok := m["object_format"].(string)
+	if !ok || (objectFormat != "sha1" && objectFormat != "sha256") {
 		return nil, refused(ConfigMalformed)
 	}
 	if m["revision"] != contracts.Revision {
@@ -129,7 +134,7 @@ func Parse(raw []byte) (*Config, error) {
 			return nil, refused(ConfigMalformed)
 		}
 	}
-	c := &Config{owner: owner, roles: make(map[Role]Pin), gates: make(map[Gate]bool)}
+	c := &Config{owner: owner, objectFormat: objectFormat, roles: make(map[Role]Pin), gates: make(map[Gate]bool)}
 	seen := map[string]bool{}
 	for _, r := range Roles() {
 		value, exists := roleMap[string(r)]
@@ -257,6 +262,15 @@ func knownGate(g Gate) bool {
 		}
 	}
 	return false
+}
+
+// ObjectFormat returns the protected Git profile, or empty for unavailable config.
+// It has no default and is never derived from a supplied revision.
+func (c *Config) ObjectFormat() string {
+	if c == nil || !c.valid {
+		return ""
+	}
+	return c.objectFormat
 }
 
 func (c *Config) Pin(role Role) (Pin, bool) {

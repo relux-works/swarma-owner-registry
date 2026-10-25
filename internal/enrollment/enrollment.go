@@ -158,6 +158,7 @@ type Trust struct {
 type Adapter struct {
 	mu                           sync.Mutex
 	policy                       *policy.Policy
+	objectFormat                 string
 	verifier                     registry.Verifier
 	transaction                  Transaction
 	state                        State
@@ -209,7 +210,7 @@ func New(t Trust) (*Adapter, error) {
 	for i := range retained.Exports {
 		sortEntries(retained.Exports[i].Entries)
 	}
-	return &Adapter{policy: p, verifier: t.Verifier, transaction: t.Transaction, state: retained, firstUse: t.FirstUse, reconciled: t.Reconciled}, nil
+	return &Adapter{policy: p, objectFormat: t.Config.ObjectFormat(), verifier: t.Verifier, transaction: t.Transaction, state: retained, firstUse: t.FirstUse, reconciled: t.Reconciled}, nil
 }
 
 func (a *Adapter) Fenced() bool {
@@ -258,7 +259,7 @@ func (a *Adapter) Load(input Projection) (*registry.Snapshot, error) {
 	p := input.Clone()
 	sortEntries(p.Entries)
 	bridge := &storeBridge{adapter: a, projection: p}
-	loader := registry.Loader{Policy: a.policy, Verifier: a.verifier, Store: bridge}
+	loader := registry.Loader{ObjectFormat: a.objectFormat, Policy: a.policy, Verifier: a.verifier, Store: bridge}
 	snapshot, _, err := loader.Load(registry.Input{Revision: p.Revision, Entries: p.Entries, Retained: a.state.HighWater.Clone(), FirstUse: a.firstUse, Reconciled: a.reconciled})
 	if err != nil {
 		return fail(err)

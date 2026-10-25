@@ -211,7 +211,7 @@ func load(t *testing.T, name string) sample {
 		}
 		roles[string(r)] = map[string]any{"key": k, "purpose": purposes[r], "scope": scope}
 	}
-	s.document = map[string]any{"revision": "5f4e7435d75697385ff6ce15a7501ac6f31c8ea5", "owner": "owner-a", "roles": roles, "record_types": []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}, "key_classes": []any{"agent", "operator-device", "service"}, "service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)}}
+	s.document = map[string]any{"revision": "5f4e7435d75697385ff6ce15a7501ac6f31c8ea5", "owner": "owner-a", "object_format": "sha1", "roles": roles, "record_types": []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}, "key_classes": []any{"agent", "operator-device", "service"}, "service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)}}
 	s.config = config(t, s.document)
 	return s
 }

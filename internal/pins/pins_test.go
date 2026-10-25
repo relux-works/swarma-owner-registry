@@ -41,7 +41,7 @@ func validDocument() map[string]any {
 		roles[string(role)] = map[string]any{"key": testKey(byte(i + 1)), "purpose": purposes[i], "scope": scope}
 	}
 	return map[string]any{
-		"revision": "5f4e7435d75697385ff6ce15a7501ac6f31c8ea5", "owner": "owner-a", "roles": roles,
+		"revision": "5f4e7435d75697385ff6ce15a7501ac6f31c8ea5", "owner": "owner-a", "object_format": "sha1", "roles": roles,
 		"record_types":    []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"},
 		"key_classes":     []any{"agent", "operator-device", "service"},
 		"service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)},

@@ -35,6 +35,7 @@ type vector struct {
 	Fixture  struct {
 		Audience string
 		Registry struct {
+			ObjectFormat      string `json:"object_format"`
 			Publisher         string `json:"publisher_key"`
 			PreviousPublisher string `json:"previous_publisher_key"`
 			Revision          string
@@ -60,7 +61,7 @@ func fixture(t *testing.T, name string) vector {
 	if err = json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
-	if m.Path != "github.com/relux-works/swarma-registrar" || m.Version != "v0.0.0-20261023164451-5f44ebf3f788" || m.Replace != nil {
+	if m.Path != "github.com/relux-works/swarma-registrar" || m.Version != "v0.0.0-20261025040811-264660e5dabb" || m.Replace != nil {
 		t.Fatal("unreviewed fixture module")
 	}
 	folder := "0-negative"
@@ -111,6 +112,10 @@ func public(n byte) string {
 }
 func configuration(t *testing.T, publisher string, open bool) *pins.Config {
 	t.Helper()
+	return configurationWithFormat(t, publisher, open, "sha1")
+}
+func configurationWithFormat(t *testing.T, publisher string, open bool, objectFormat string) *pins.Config {
+	t.Helper()
 	roles := map[string]any{}
 	purposes := []string{"registry-revocation", "git-commit", "enrollment/1", "purpose-5", "operator", "grant", "grant-service"}
 	for i, r := range pins.Roles() {
@@ -127,7 +132,7 @@ func configuration(t *testing.T, publisher string, open bool) *pins.Config {
 		}
 		roles[string(r)] = map[string]any{"key": key, "purpose": purposes[i], "scope": scope}
 	}
-	d := map[string]any{"revision": contracts.Revision, "owner": "owner-a", "roles": roles, "record_types": []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}, "key_classes": []any{"agent", "operator-device", "service"}, "service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)}}
+	d := map[string]any{"revision": contracts.Revision, "owner": "owner-a", "object_format": objectFormat, "roles": roles, "record_types": []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}, "key_classes": []any{"agent", "operator-device", "service"}, "service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)}}
 	if open {
 		d["activation"] = map[string]any{"enrollment_intake": true}
 	}
@@ -213,7 +218,7 @@ func (x *transaction) Resolve(b admission.Binding) (admission.Resolution, error)
 func adapter(t *testing.T, f vector, p admission.Projection, state admission.State, x *transaction) (*admission.Adapter, *verifier) {
 	t.Helper()
 	v := &verifier{projection: p}
-	a, err := admission.New(admission.Trust{Config: configuration(t, f.Fixture.Registry.Publisher, true), Audience: f.Fixture.Audience, Stations: map[string]bool{"host-a": true, "host-b": true}, Verifier: v, Transaction: x, Retained: state, FirstUse: state.HighWater == nil, Reconciled: state.HighWater != nil})
+	a, err := admission.New(admission.Trust{Config: configurationWithFormat(t, f.Fixture.Registry.Publisher, true, f.Fixture.Registry.ObjectFormat), Audience: f.Fixture.Audience, Stations: map[string]bool{"host-a": true, "host-b": true}, Verifier: v, Transaction: x, Retained: state, FirstUse: state.HighWater == nil, Reconciled: state.HighWater != nil})
 	if err != nil {
 		t.Fatal(err)
 	}

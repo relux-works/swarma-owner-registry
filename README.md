@@ -26,10 +26,16 @@ reader; it refuses duplicate names, unknown members and invalid shapes. The
 caller supplies trusted configuration bytes, never request or repository data.
 No configuration file is opened by this package.
 
-The top-level members are `revision`, `owner`, `roles`, `record_types`,
+The top-level members are `revision`, `owner`, `object_format`, `roles`, `record_types`,
 `key_classes`, `service_profile` and optional `activation`. The revision and
 complete type/class sets must match the compiled contract; arrays cannot add,
 duplicate or omit entries. Owner is a nonempty UTF-8 string of at most 255 bytes.
+`object_format` is required and exactly `sha1` or `sha256`; omission, other
+values and nonstrings refuse as `config_malformed`. There is no default or
+inference from a revision. The registrar deployment and this service must share
+the same protected Git object format. `Config.ObjectFormat()` returns that
+immutable value, or an empty string for unavailable configuration.
+
 Each required role is a closed `{key,purpose,scope}` object:
 
 | Role | Local purpose label | Exact scope |
@@ -149,6 +155,8 @@ independently trusted host classification. The caller supplies a protected
 reviewed signed commit under the protected commit-signer pin/maintainer allowlist,
 and verifies ancestry. This package never fetches or
 follows a branch, verifies a Git signature itself, or admits self-enrollment.
+Every Loader receives the protected `object_format` pin; cross-format commit
+IDs refuse as `registry_unavailable` before any transaction operation.
 
 The `enrollment_intake` gate defaults closed. Opening it is an owner declaration;
 `New` also refuses an absent transaction. There is no production `Transaction`
@@ -383,9 +391,12 @@ commit, custodian or exclusion transaction is implemented here.
 ## Tools
 
 Use Go 1.26.10 (module language version 1.26.0) and `gofmt`. Dependencies are
-limited to the reviewed public `waggle` and its exact registrar dependency;
-`go.mod`, `go.sum` and the dependency policy test retain those versions. Configuration parsing and the
-reviewed record package use one registrar CCJ implementation. No other modules are required.
+limited to the reviewed public `waggle` at `v0.0.0-20261025015329-5f4e7435d756`
+and registrar at `v0.0.0-20261025040811-264660e5dabb`. Module selection uses this
+registrar pin over waggle's older requirement. Its CCJ packages are byte-identical
+to that requirement; configuration parsing and the reviewed record package use
+one implementation. `go.mod`, `go.sum` and the dependency policy test retain
+those versions. No other modules are required.
 
 Set `GOFLAGS=-trimpath`, keep `GOCACHE` and `GOMODCACHE` in a disposable workspace
 cache directory, and put the selected Go toolchain on `PATH`. On a shared host,

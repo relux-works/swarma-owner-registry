@@ -21,7 +21,7 @@ func allowed(p modulePolicy) bool {
 	if p.Module.Path != "github.com/relux-works/swarma-owner-registry" || p.Go != "1.26.0" || len(p.Require) != 2 || len(p.Replace)+len(p.Exclude)+len(p.Tool) != 0 {
 		return false
 	}
-	want := map[string]string{"github.com/relux-works/waggle": "v0.0.0-20261025015329-5f4e7435d756", "github.com/relux-works/swarma-registrar": "v0.0.0-20261023164451-5f44ebf3f788"}
+	want := map[string]string{"github.com/relux-works/waggle": "v0.0.0-20261025015329-5f4e7435d756", "github.com/relux-works/swarma-registrar": "v0.0.0-20261025040811-264660e5dabb"}
 	for _, r := range p.Require {
 		if want[r.Path] != r.Version {
 			return false
