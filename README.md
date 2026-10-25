@@ -74,7 +74,8 @@ respectively declare publication, freshness verification and re-anchor readiness
 opening one leaves the others closed and implements none of those later slices.
 
 S5 receipt fields exist in the dependency, but this intake supplies no receipt,
-requirement flag or margin. Receipt composition remains separate adapter work;
+requirement flag or margin. The pure `internal/composition` adapter is available;
+the retaining intake integration remains separate work;
 no new activation gate is declared by this re-pin.
 
 The immutable `Config` exposes:
@@ -520,6 +521,81 @@ construction/ordering only. Witness authentication, head races, pending intent,
 slow reads, real-head witness transactions, durable restore qualification,
 re-anchor integration, the 20-second scheduler and activation remain later work.
 
+## Pure freshness receipt composition
+
+`internal/composition` is a pure S5 consumer adapter, separate from publication
+and intake. It imports the pinned verifier and `internal/qtime`, with no
+publisher or persistence dependency. It changes no closed record or activation
+gate. The witness client, durability, retaining intake adapter, external-root
+currentness and final effect integration remain unqualified.
+
+Call `VerifyFreshness(Proof)` with a complete normal proof, or explicitly call
+`VerifyFreshnessReanchor(Proof)` with exactly one recovery tip. Only full F
+success returns an opaque process-local `Admission` and the original library
+`Result.FreshnessReceipt` alongside its Plan. Refusals return nil Admission,
+zero Plan and nil receipt with the exact library code; normal verification never
+retries recovery. `Admission.Plan()` returns a detached plan, `Anchor()` the
+admitted tip projection and `Projection()` the conservative time projection.
+`Audit()` reports origin only, including recovery endpoints; it never establishes
+current validity. Never construct, copy, marshal or persist a receipt. Restart
+requires new full F admission; restored plan/audit data cannot restore it.
+
+Before `New(Use)`, the caller atomically persists the admitted tip anchor,
+watermark and any re-anchor audit, and retains the projected decision floor and
+boot outside rollback. It supplies those exact values in a typed
+`PersistenceAcknowledgement`. The adapter checks equality with this Admission;
+that comparison authenticates no storage, transport or crash durability. Missing
+acknowledgement or an uninitialized Admission returns a typed
+`freshness_receipt_unavailable` setup error; mismatched acknowledgement, a
+regressed prior watermark or a conflicting pre-attached receipt returns
+`freshness_receipt_binding_mismatch`. A raw receipt without its Admission cannot
+bypass acknowledgement. Setup errors precede entry-point verification.
+The library's exact Plan watermark (the upper verifier time) and the projection's
+lower interval watermark remain distinct values; neither is a provider floor.
+
+`Use.Context` supplies the same **whole immutable SignedSnapshots Evidence** and
+current authenticated witness/read, together with protected policy and identity
+facts. The adapter attaches the original receipt and acknowledged admitted tip,
+never the old mint anchor. Rebuilding even byte-identical Evidence, changing any
+row or qualification, re-anchor and restart require a new full F admission.
+`Use.Clock` supplies a caller-qualified `qtime.Interval`, protected prior admitted
+watermark and retained decision floor. `Interval.Project` supplies genuine
+conservative Now, Watermark and exclusive authority, overriding cached point
+fields. Invalid intervals defer a typed time refusal to the verifier so earlier
+wire/signed-evidence failures keep their order. The pure projection performs no
+provider authentication, clock collection or continuity recovery.
+
+`Consumer` forwards `VerifyAttestation`, `VerifyServiceAttestation`,
+`VerifyMessage`, `VerifyEnvelope`, `VerifyOperator`, `Authorize` and
+`CheckRevocation` exactly once. It never retries without the receipt. Context
+`RequireFreshnessReceipt` and `FreshnessMarginSeconds` retain their pinned
+semantics: required absence refuses; optional absence deliberately selects legacy
+own-age; a supplied Admission always selects receipt mode, even if optional.
+R1 checks presence/provenance/margin, R2 checks complete current bindings/read,
+and R3 applies fixed exclusive expiry. Missing facts refuse
+`freshness_receipt_unavailable`, malformed facts/margin refuse
+`freshness_receipt_invalid`, foreign bindings/earlier read/rebuilt Evidence refuse
+`freshness_receipt_binding_mismatch`, and expiry refuses
+`freshness_receipt_expired`. Earlier envelope/signed-evidence failures keep
+precedence. Only the bound registry snapshot's own-age can be replaced; device,
+operator and service paths still validate R1–R3 without extending external-root
+ages. Consumer calls never mint receipts.
+
+Expiry stays `min(tip.issued_at, issuing WitnessReadAt) + max_age`, with
+`max_age <= 60`. Consumption requires `max(Now, Watermark) < expiry - margin`,
+where integer margin is 0–60. Newer reads and clock contexts never extend it;
+F's inclusive age boundary can mint an already unusable receipt.
+
+Choose snapshot submission separately, before verification:
+`CheckSubmittedSnapshot(Submission, ids, keys)` builds Evidence from the exact
+submitted bytes and protected issuer/availability/rollback/max-age facts. It
+uses the no-receipt own-age path even for a replacement registry snapshot or
+operator/grant root, without running a receipt check first. It cannot be used as
+a fallback after an authority refusal. A registry receipt must not accompany an
+external-root authority check. Legacy age unavailability preserves the library's
+`Unavailable` state and nil error; receipt refusals preserve `Unavailable` and
+the exact typed error. No retaining intake integration ships here.
+
 ## Tools
 
 Use Go 1.26.10 (module language version 1.26.0) and `gofmt`. Dependencies are
@@ -535,10 +611,10 @@ cache directory, and put the selected Go toolchain on `PATH`. On a shared host,
 run Go commands through the installed scheduling wrapper:
 
 ```sh
-heavy-slot --label registry -- go build ./internal/freshness ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
-heavy-slot --label registry -- go test ./internal/freshness ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
-heavy-slot --label registry -- go vet ./internal/freshness ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
-heavy-slot --label registry -- gofmt -w internal/freshness/*.go internal/enrollment/*.go internal/contracts/*.go internal/pins/*.go internal/intake/*.go
+heavy-slot --label registry -- go build ./internal/composition ./internal/freshness ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
+heavy-slot --label registry -- go test ./internal/composition ./internal/freshness ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
+heavy-slot --label registry -- go vet ./internal/composition ./internal/freshness ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
+heavy-slot --label registry -- gofmt -w internal/composition/*.go internal/freshness/*.go internal/enrollment/*.go internal/contracts/*.go internal/pins/*.go internal/intake/*.go
 heavy-slot --label registry -- go build ./internal/store
 heavy-slot --label registry -- go test ./internal/store -timeout=2h
 heavy-slot --label registry -- go vet ./internal/store
