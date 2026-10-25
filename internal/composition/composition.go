@@ -193,6 +193,14 @@ type Use struct {
 // remain exclusively in the pinned verifier. Each method invokes it once.
 type Consumer struct{ context verifier.Context }
 
+// NewRequired selects receipt-backed authority before construction. It lets
+// adapters keep ordinary untyped facts separate from receipt policy; omission
+// of an Admission can never silently choose legacy own-age verification.
+func NewRequired(in Use) (*Consumer, error) {
+	in.Context.RequireFreshnessReceipt = true
+	return New(in)
+}
+
 // New binds an admitted original receipt only after its exact acknowledgement.
 // Nil Admission with Context.RequireFreshnessReceipt=false is deliberate legacy
 // own-age verification.

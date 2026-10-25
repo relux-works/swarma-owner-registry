@@ -73,10 +73,10 @@ and cannot expand the compiled record/profile registry. The three S4 gates
 respectively declare publication, freshness verification and re-anchor readiness;
 opening one leaves the others closed and implements none of those later slices.
 
-S5 receipt fields exist in the dependency, but this intake supplies no receipt,
-requirement flag or margin. The pure `internal/composition` adapter is available;
-the retaining intake integration remains separate work;
-no new activation gate is declared by this re-pin.
+The legacy `Facts`/`Accept` path supplies no S5 receipt, requirement flag or
+margin. `internal/intake.Registry` separately retains the complete snapshot
+premise and uses `internal/composition` for acknowledged receipt consumption.
+This adds no activation gate or external-root currency waiver.
 
 The immutable `Config` exposes:
 
@@ -526,8 +526,9 @@ re-anchor integration, the 20-second scheduler and activation remain later work.
 `internal/composition` is a pure S5 consumer adapter, separate from publication
 and intake. It imports the pinned verifier and `internal/qtime`, with no
 publisher or persistence dependency. It changes no closed record or activation
-gate. The witness client, durability, retaining intake adapter, external-root
-currentness and final effect integration remain unqualified.
+gate. The witness client, durability, external-root currentness and real final
+effect integration remain unqualified. The retaining intake API below supplies
+only caller-qualified composition and a typed final-boundary hook.
 
 Call `VerifyFreshness(Proof)` with a complete normal proof, or explicitly call
 `VerifyFreshnessReanchor(Proof)` with exactly one recovery tip. Only full F
@@ -594,7 +595,62 @@ operator/grant root, without running a receipt check first. It cannot be used as
 a fallback after an authority refusal. A registry receipt must not accompany an
 external-root authority check. Legacy age unavailability preserves the library's
 `Unavailable` state and nil error; receipt refusals preserve `Unavailable` and
-the exact typed error. No retaining intake integration ships here.
+the exact typed error. `NewRequired(Use)` always selects required-receipt mode;
+ordinary untyped intake facts cannot select this policy or inject a receipt.
+
+## Retaining registry-owner intake
+
+`internal/intake.NewRegistry(config, snapshots)` freezes the **whole** snapshot
+map once and starts without receipt authority. `ReplaceSnapshots` is the explicit
+premise-update boundary: call it after any bytes, availability, cumulative or
+rollback qualification change, including another row and a change back to old
+values. It always creates a new Evidence identity, even for identical bytes.
+Updates and complete proofs are serialized against intake; a failed update
+fences the old premise. Mutating the source map never mutates retained Evidence;
+the caller must report actual premise changes through this method.
+
+Call `Registry.VerifyFreshness(composition.Proof)` or explicitly select
+`VerifyFreshnessReanchor` to mint a receipt through full F. The adapter replaces
+the proof's static authority fields with the protected configuration and its
+snapshot field with the retained whole Evidence. A failed proof removes prior
+receipt authority and never retries another mode. Persist the admitted
+`Admission.Plan()`, admitted `Anchor()`, recovery audit and protected projection
+state, then supply the exact `PersistenceAcknowledgement` on each use. Restart
+has no receipt; retained acknowledgements cannot restore one.
+
+`Registry.Accept(kind, exactBytes, RegistryCurrent)` admits agent attestations
+with that same retained Evidence and original receipt across genuine clock/read
+updates. `RegistryCurrent` supplies ordinary `Facts` with `Snapshots=nil`, the
+qualified `composition.Clock`, current authenticated `JournalWitness` and
+`WitnessReadAt`, and the persistence acknowledgement. Cached point times cannot
+replace the interval projection. Receipt margin is zero; expiry remains fixed
+and exclusive. Missing receipt/acknowledgement/witness refuses
+`freshness_receipt_unavailable`; rebuilt/changed premises or mismatched
+acknowledgement refuse `freshness_receipt_binding_mismatch`; malformed receipt
+facts refuse `freshness_receipt_invalid`; expiry refuses
+`freshness_receipt_expired`. Other refusals retain existing intake/verifier codes.
+No refusal retries without the receipt.
+
+For a new `revocation/1`, `Registry.Accept` instead selects
+`composition.CheckSubmittedSnapshot` up front, using exact submitted bytes and
+`RegistryCurrent.Submission` qualification metadata (`Bytes` is ignored). This
+own-age path requires no receipt or acknowledgement and preserves external-root
+age checks. Successful submission neither updates the retained premise nor
+mints authority. After the replacement's committed head is fully F-verified and
+acknowledged, its newly minted receipt can authorize its new Evidence. Grants,
+devices and services are excluded from this retaining path; their existing
+legacy routing and external-root age checks remain unchanged.
+
+An early `Accepted` is only a candidate. `Registry.Apply(candidate, boundary,
+effect)` repeats full admission of its exact bytes under the caller's typed
+`RegistryBoundary`, which supplies freshly collected facts and holds final
+exclusion through the callback, including the `RegistryEffect`. On refusal the
+effect hook is never invoked; effect errors propagate unchanged without retry.
+The adapter also excludes snapshot/proof updates between recheck and effect;
+the effect must not re-enter methods on that same Registry. The caller runs the
+boundary callback exactly once, propagates its error and owns actual effects,
+locking, witness authentication and durable storage. This API implements none
+of those services, the scheduler or pending external-root freshness formats.
 
 ## Tools
 
