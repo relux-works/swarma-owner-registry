@@ -359,7 +359,10 @@ func (p *Publisher) Publish(in Input) ([]byte, Outcome) {
 		if e != nil {
 			var typed *journal.Error
 			if errors.As(e, &typed) {
-				return no(string(typed.Code))
+				switch typed.Code {
+				case journal.Malformed, journal.ProfileRefused, journal.SignerUnavailable, journal.SignerInvalid, journal.Rollback:
+					return no(string(typed.Code))
+				}
 			}
 			return no(string(journal.SignerUnavailable))
 		}
