@@ -456,6 +456,51 @@ control is explicitly skipped because no authenticated gossip source exists.
 Unit candidates do not qualify durable publication, live custody, time sources,
 gossip discovery or absence of hidden publications.
 
+## Pure freshness publication
+
+`internal/freshness` derives the closed registry-owner `freshness/1` body from
+protected scope, a retained eight-field `Anchor`, a resolved checkpoint and
+an explicit issue time. It uses the existing closed-profile `journal.Signer`
+and self-checks with the pinned `VerifyFreshness`. The global publication
+sequence advances by one across head changes. Same-head publications name the
+last freshness ID; the first publication after an advance has null `prev`.
+Issue times strictly advance, including beyond an actual epoch predecessor.
+Quiet publications preserve exact base/checkpoint bytes and the journal head.
+
+`Input` supplies protected verifier policy/time, a time-provider watermark,
+exact snapshot/checkpoint, query IDs/keys and `WitnessRead`. The latter carries
+an already authenticated fact, its original evidence bytes and exact protected
+read timestamp. The future witness client must bind these inputs to the current
+resolved head, exclude pending intent and share publication serialization.
+The watermark is clamped to retained state before verification. Refusals retain
+the pinned code and an empty plan, with no publication or persistence call.
+
+`State` retains explicit genesis, the current exact eight-field anchor, every
+accepted publication across all heads, original witness/read evidence, exact
+snapshot/checkpoint bytes, accepted code/plan and watermark. The archive grows
+past the verifier's 64-publication proof window. `New` requires externally
+qualified `Recovery`: complete-history/floor and real-head reconciliation, time
+continuity, old-instance exclusion and an exact independent `StateID`. Genesis
+also needs explicit authorization; missing state never grants it. A locally
+computed inventory digest supplies no independent reconciliation proof.
+Historical archive membership records admission rather than current authority.
+
+`Persistence.Commit(Update)` must compare the prior state digest and atomically
+retain the complete next inventory and exact outcome, with checked durability
+before acknowledging its exact digest. `Publish` returns bytes and `Outcome`
+only after that acknowledgement. Unknown or mismatched durability fences later
+calls. `LastResolved` copies recovery evidence; after uncertainty it cannot
+establish what reached storage. Exact retransmission is currentness-checked,
+then returns the original bytes/code/plan without signing, another position or
+renewal. `Outcome` carries no S5 consumer receipt; receipt composition remains
+separate work. No production persistence implementation is supplied.
+
+Tests use public fixed-seed vectors and the real closed-profile signing gate,
+with in-memory persistence and authenticated-fact doubles. They qualify local
+construction/ordering only. Witness authentication, head races, pending intent,
+slow reads, real-head witness transactions, durable restore qualification,
+re-anchor integration, the 20-second scheduler and activation remain later work.
+
 ## Tools
 
 Use Go 1.26.10 (module language version 1.26.0) and `gofmt`. Dependencies are
@@ -471,10 +516,10 @@ cache directory, and put the selected Go toolchain on `PATH`. On a shared host,
 run Go commands through the installed scheduling wrapper:
 
 ```sh
-heavy-slot --label registry -- go build ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
-heavy-slot --label registry -- go test ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
-heavy-slot --label registry -- go vet ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
-heavy-slot --label registry -- gofmt -w internal/enrollment/*.go internal/contracts/*.go internal/pins/*.go internal/intake/*.go
+heavy-slot --label registry -- go build ./internal/freshness ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
+heavy-slot --label registry -- go test ./internal/freshness ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
+heavy-slot --label registry -- go vet ./internal/freshness ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
+heavy-slot --label registry -- gofmt -w internal/freshness/*.go internal/enrollment/*.go internal/contracts/*.go internal/pins/*.go internal/intake/*.go
 heavy-slot --label registry -- go build ./internal/store
 heavy-slot --label registry -- go test ./internal/store -timeout=2h
 heavy-slot --label registry -- go vet ./internal/store
