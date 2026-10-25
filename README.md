@@ -452,7 +452,7 @@ The Linux workflow runs on `ubuntu-26.04` with Go `1.26.10`, local toolchain
 selection and read-only repository permissions. Both actions are pinned to exact
 commits, checkout credentials are not retained, and full history is fetched for
 the pull request's added-line check. Pull requests and pushes to `main` run one
-60-minute job: module verification, build, vet, formatting, public hygiene, an
+60-minute job: module verification and tidiness, build, vet, formatting, public hygiene, an
 explicit dependency-policy test and the verbose full suite. The full-suite
 command has a 50-minute per-package timeout to cover the storage tests. There is
 no privileged-test exemption; the workflow runs the existing tests unchanged.
@@ -464,6 +464,7 @@ wrapper, with Go on `PATH` and `GOTOOLCHAIN=local GOMAXPROCS=2 GOFLAGS=-trimpath
 
 ```sh
 heavy-slot --label registry -- go mod verify
+heavy-slot --label registry -- go mod tidy -diff
 heavy-slot --label registry -- go build ./...
 heavy-slot --label registry -- go vet ./...
 heavy-slot --label registry -- bash -e -c 'out="$(gofmt -l .)"; test -z "$out"'

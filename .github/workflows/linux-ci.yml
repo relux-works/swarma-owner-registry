@@ -28,6 +28,8 @@ jobs:
           go-version: '1.26.10'
       - name: Verify modules
         run: go mod verify
+      - name: Check module tidiness
+        run: go mod tidy -diff
       - name: Build
         run: go build ./...
       - name: Vet
