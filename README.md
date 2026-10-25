@@ -259,6 +259,58 @@ bounds, and complete WS wrapper 8,192 bytes including LF. The caller supplies th
 entire received carrier. These budget/shape checks authenticate no proof or
 wrapper, implement no WS transport and never truncate a complete proof to fit.
 
+## Pure journal construction
+
+`internal/journal` builds unsigned `journal-entry/1` records and signed
+`checkpoint/1` candidates using the pinned record codec, content IDs and signing
+preimages. `BuildEntry` receives a closed body and separately retained prior
+entry time. `BuildCheckpoint` receives a closed body, prior checkpoint time and
+an owner signer. Equal times are permitted; backward times are refused. Hash
+links, scopes, signatures, snapshot admission and the ordered journal decisions
+are checked by the pinned `VerifyJournal`, exposed through `journal.Verify`.
+Journal admission authenticates references, not the referenced content's rights.
+
+`NewSigner` wraps an external `SignatureService` behind the closed `Signer`
+interface. Only registry-owner `revocation/1`, `checkpoint/1` and `freshness/1`
+bodies enter that service. Shapes, key/owner bindings and complete output bounds
+are checked first; returned signatures are checked against the original pinned
+preimage. Failures expose stable codes only. Production must supply and qualify
+the separate custody service; this package provides no private-key store,
+process launcher, key generation or custody activation. Published fixed seeds
+are used only in tests.
+
+`BuildPublication` accepts the oldest-first anchor/new-record/reissue entries,
+the prepared checkpoint body, exact prior checkpoint, supplied reissued snapshot
+and protected snapshot availability/age/rollback facts. Its validated witness
+comes from `ReduceProjection`. It returns owned exact entries/candidate/snapshot,
+the exact prior checkpoint lookup, explicit lookup availability and the immutable
+verifier context needed to repeat admission. Every refusal returns an empty
+prepared value and plan; pinned verifier refusal codes are preserved. It also
+requires this application's three-entry layout and the snapshot-add binding,
+and refuses reuse of the prior checkpoint's snapshot ID. The supplied snapshot
+must already be the publisher's qualified cumulative reissue: comparing complete
+old/new cumulative history and enforcing unique issuance belongs to the snapshot
+publisher, not reference-only journal admission.
+
+`ReduceProjection` takes all eight projection fields and already authenticated
+originals: protected scope, exact checkpoint, approved candidate digest and
+validated predecessor. It binds `checkpoint_time` to checkpoint `at` verbatim,
+retains all eight fields and the original checkpoint, then exposes the six-field
+fact. A received six-field tuple is never accepted. Retained projections reject
+same-position head/checkpoint forks and lower positions. Its zero value is
+unavailable. Missing retained state is usable only after independent genesis
+qualification; this reducer performs no network authentication, ancestry proof
+fetch, challenged latest read or witness resolution. Those remain adapter work.
+
+All records use the pinned duplicate-free depth-16 parser and the 8,192-byte
+record bound. `Verify` keeps the journal limit of 64 entries, two checkpoints and
+540,672 received bytes. Publication preparation additionally precharges its
+snapshot, prior-checkpoint and projection context against that same byte budget,
+including the complete generated candidate, before signing; this is a stricter
+local construction budget, with no truncation or pagination. Prepared signatures
+are private candidates, not publication success. No store, witness, bridge,
+commit, custodian or exclusion transaction is implemented here.
+
 ## Tools
 
 Use Go 1.26.10 (module language version 1.26.0) and `gofmt`. Dependencies are
@@ -279,11 +331,15 @@ heavy-slot --label registry -- go build ./internal/store
 heavy-slot --label registry -- go test ./internal/store -timeout=2h
 heavy-slot --label registry -- go vet ./internal/store
 heavy-slot --label registry -- gofmt -w internal/store/*.go
+heavy-slot --label registry -- go build ./internal/journal
+heavy-slot --label registry -- go test ./internal/journal
+heavy-slot --label registry -- go vet ./internal/journal
+heavy-slot --label registry -- gofmt -w internal/journal/*.go
 ```
 
 `go build` checks the selected library packages; the core `go test` command covers policy parsing,
 closed gates, role separation, dependency pins and signed intake refusals and
-positive controls; `go vet` checks those packages. Intake tests read public
+positive controls; `go vet` checks those packages. Intake and journal tests read public
 fixtures from the build-selected module directory returned by
 `go list -m -json github.com/relux-works/waggle`, checking the exact module path,
 reviewed version and absence of replacements. Standard Go configuration,
