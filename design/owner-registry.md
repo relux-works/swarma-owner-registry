@@ -1,6 +1,8 @@
 # Owner registry service design
 
-Review draft, 2026-10-25, reconciled to merged S4 D38–D41 and S5 receipts.
+Review draft, 2026-10-25, reconciled to merged S4 D38–D41, S5 receipts and
+the merged qualified-time contract at T. Time adapter/backend qualification and
+activation remain separate gates.
 The pinned public S4 record and S5 receipt contracts are normative for this
 design. Content approval, repository landing, consumer integration and activation are separate;
 this text supplies no runtime or custody/transport/recovery qualification.
@@ -26,7 +28,7 @@ Immutable inputs read for this design:
 | K | [Key service](https://github.com/relux-works/swarma-keymaker/blob/0ae0c4e93c3fae9db2bcadcfb5eeafbdcf0668c0/spec/keymaker.md), §§4.3, 5, 8–9: custody, pins, enrollment and purpose 5. |
 | W | [Witness consumer](https://github.com/relux-works/swarma-keymaker/blob/5eb89870d25cd9c4dd9e71180d9449f18fba206f/spec/keymaker-witness.md), §§3.3–6, 8: operations, intent ordering, recovery and WC1. |
 | B | [Broker](https://github.com/relux-works/swarma-credential-broker/blob/f2c01f52477b5885aefd5b6bd04d09a6a22813b2/spec/broker.md), §§6.4–6.6: local authority and the registry boundary. |
-| T | [Time policy](https://github.com/relux-works/swarma-credential-broker/blob/f2c01f52477b5885aefd5b6bd04d09a6a22813b2/docs/time-policy.md) and [provider contract](https://github.com/relux-works/swarma-credential-broker/blob/f2c01f52477b5885aefd5b6bd04d09a6a22813b2/docs/time-confidence.md). |
+| T | [Time policy](https://github.com/relux-works/swarma-credential-broker/blob/a1c69eb9ed6576d3b060dfb3e697de2fd2180f0d/docs/time-policy.md) and [qualified consumer contract](https://github.com/relux-works/swarma-credential-broker/blob/a1c69eb9ed6576d3b060dfb3e697de2fd2180f0d/docs/time-contract.md), `swarma-credential-broker/docs/time-contract.md` at exact revision `a1c69eb9ed6576d3b060dfb3e697de2fd2180f0d` (`a1c69eb`). Merged specification; receipt, independent continuity backend and bounded consumption implementation remain activation gates. |
 | R | [Registrar](https://github.com/relux-works/swarma-registrar/blob/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/spec/registrar.md), §§4.2–4.5 and Appendix C.3. |
 | P | Public [ccj](https://github.com/relux-works/swarma-registrar/tree/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/ccj), [enrollment](https://github.com/relux-works/swarma-registrar/tree/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/enrollment) and [registry](https://github.com/relux-works/swarma-registrar/tree/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/registry) packages. |
 | WS | [Witness server proposal](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md), PR #20: exact server/wrapper, challenged reads, strict custodian and limits; spec only, not deployed or qualified. |
@@ -419,7 +421,7 @@ freshness from restored bytes or reset its counter to match the old journal.
 
 ### 5.3 Consumer gates, bounded catch-up and composition
 
-After the planned re-pin, call V's `VerifyFreshness(chain,checkpoint,ids,keys)`
+With the reviewed S5 module pin in place, call `VerifyFreshness(chain,checkpoint,ids,keys)`
 with oldest-first exact raw publication bytes, exact raw current checkpoint,
 protected `FreshnessAnchor`, `WitnessReadAt`, `SignedSnapshots` and the existing
 six-field authenticated `JournalWitness`. Consumers pin registry root/owner/scope
@@ -784,6 +786,27 @@ validate exact candidate and proof budget; acknowledge external intent before
 any authoritative local commit; sync exact state/inventory/outcome/watermark;
 acknowledge matching committed resolution; revalidate bytes/time/authority;
 atomically publish the resolved head, then bound freshness and acknowledge.
+
+Keep sole-writer serialization, publication quiescence and old-instance exclusion
+across the intent/commit/resolution sequence, but perform qualified-time collection
+and witness/custodian RPCs outside final store, journal and publication locks;
+qualify the outer exclusion and dependency graph so they cannot indirectly block
+emergency stop or introduce a provider callback cycle. After the preceding remote
+phase, obtain a fresh operation-bound, durably acknowledged receipt before each
+final local commit or publication window, reserve that window's complete bounded
+handoff and local durability allowance within the receipt interval and uncertainty
+cap, then enter once and revalidate the exact candidate/head, native operation
+binding, challenge, boot, interval, authority and original monotonic deadline using
+only bounded local work. Do not carry a cached passed verdict or reuse a receipt
+across a witness call, a changed candidate, a retry or another final window. Release
+final local locks before any further provider or witness call; all collection,
+witness/custodian traffic, local durability and handoffs share the original
+five-second decision budget or its stricter remaining deadline, without renewal.
+Unknown latency, an unqualified handoff or insufficient remaining budget refuses.
+This separation does not waive acknowledged intent before authoritative commit,
+independently verified durable commit before matching resolution, resolution before
+publication, or fencing and exact-candidate recovery after an uncertain outcome.
+
 One checkpoint per real entry, no batching or owner-root-change op in v0.
 Freshness-only state follows §5.2, not this witnessed inventory; a real candidate
 binds the freshness base/head transition and every publication dependency.
@@ -846,26 +869,73 @@ incomplete evidence leaves consumers fenced. No automatic restored-state restart
 
 ## 9. Shared time and continuity
 
-Import `timeconf` at B's exact revision through T; use its protected shared policy
-and stricter-only service loader. Production embedding calls `CollectorEntry()`
-first in `main`, and `StartSample` before any decision. No local collector, clock
-fallback, environment-selected source or copied uncertainty implementation.
+Import `github.com/relux-works/swarma-credential-broker/timeconf` at T's exact
+reviewed revision and use its protected shared policy and stricter-only service
+loader. Production embedding calls `CollectorEntry()` first in `main`.
+`StartSample` collects fresh evidence but alone does not implement the qualified
+consumer contract's receipt, durable continuity or bounded consumption API.
+Those remain integration and activation gates. No local collector, clock
+fallback, environment-selected source or copied uncertainty implementation is
+permitted.
 
-T requires sync age strictly below 2048 seconds, uncertainty at most 1.5 seconds
-inclusive, and an exclusive authority end `min(sample+300s, reference+2048s)`.
-Use returned conservative uncertainty, including skew ppm conversion; do not
-reduce it to offset/root distance. Every acceptance, issuance and final publication
-requires fresh confidence before the endpoint, not just a healthy startup sample.
+Retain the complete qualified provider receipt, including observed time `O`,
+conservative uncertainty `δ`, interval `[L,U]=[O−δ,O+δ]`, exclusive authority `A`,
+current boot, sample id, one-use challenge, generation and protected
+authority/policy/adapter/scope bindings. Independently derive the enrolled native
+profile's `operation_digest` from the original operation identity and canonical
+argument digest; never copy the receipt's digest as the expected binding or
+borrow the executor's Scope codec. A changed operation or retry requires new
+bound evidence, not a new continuity history. The native profile and owning
+codec require joint review before activation (T, native operation binding).
+Shared ceilings remain sync age strictly below 2048 seconds, uncertainty at
+most 1.5 seconds inclusive, and authority no later than
+`min(O+300 seconds, reference+2048 seconds)`. Use the returned uncertainty,
+including skew and the qualified remaining operation delay. Every acceptance,
+issuance and final publication requires new bound evidence with `U < A`;
+uncertainty can only tighten the consumer's validity and freshness predicates.
 
-Retain a durable effective-time watermark and previous decision bound outside
-the rollback domain. F evaluates expiry at `max(now,W)` and starts at `min(now,W)`;
-snapshot issuance cannot be future at that lower bound. New process lower bound
-must be strictly after previous `P + deltaP`; wait monotonically and resample.
-Waiting cannot recover missing history or erase a hold. Q11 (decided 2026-10-24,
-content review) requires a durable watermark, zero backward tolerance and explicit
-recovery after a continuity failure. Cross-process hold preservation and
-dedicated-service authdata remain qualification gates, not supplied by the
-provider import. Time failure never blocks the independent emergency stop.
+Distinguish the provider-owned consumed-time upper bound `W` from this registry's
+admitted-plan watermark and retained decision upper-bound floor `J`.
+`continuity.prior_high_water` is the provider floor before this consumption;
+`continuity.high_water` is its newly consumed upper bound, and `journal_floor`
+imports the registry's stricter previous decision upper bound, not the executor's
+report-floor formula. Each new consumption requires `L > max(W,J)` against the
+preceding checkpoint, then the provider durably commits `W=U` and its operation
+association before returning its receipt, even if the registry later refuses or
+never commits an operation. The provider owns every consumed bound, in-flight
+observation and hold, including failed operations; admitted registry state alone
+cannot reconstruct that history.
+
+The registry also retains its required own durable watermark, at least the
+previous decision's effective upper bound, and boot identity outside rollback
+before acknowledging its decision (T, durable continuity). Neither history
+replaces or resets the other. The registry's admitted-plan watermark still
+follows F's min/max rules and atomic publication requirements. Do not map newly
+consumed `continuity.high_water` directly to a point-time input's prior
+`Watermark`. Existing snapshot `TimeSample` and freshness `Input` types are local
+integration inputs, not qualified receipts or complete interval projections.
+
+The adapter preserves original nanosecond facts and checks their predicates.
+Any coarser representation rounds lower interval bounds downward, upper bounds
+and retained upper-bound floors upward, and exclusive endpoints downward; the
+converted predicates must also pass. Conversion may add refusals but never turn
+an original refusal into acceptance. Reject overflow, unrepresentable values or
+an unusable converted interval. `O` alone cannot replace `[L,U]`. The complete
+interval-aware mapping is a gate before any activation (§11, row 6a).
+
+A new process must recover the consumed bound, hold and any in-flight marker;
+its new lower bound must be strictly after every retained previous `P+δP`.
+A reboot preserves those obligations, requires current-boot evidence and never
+compares elapsed values across boots. Waiting and resampling are allowed only
+outside consumer exclusions; missing history, uncertain writes and holds cannot
+be repaired by waiting or by a healthy report. Q11 retains zero backward
+tolerance and explicit recovery. Dedicated-service authdata, independent store
+and witness restore exclusions, full receipt validation and bounded delivery
+remain qualification gates. Use §6.2's final local-window ordering and original
+five-second budget: collection and RPCs stay outside final local locks, and each
+window requires a new operation-bound acknowledged receipt and qualified bounded
+handoff, without deadline renewal. Time failure never blocks the independent
+emergency stop, directly or through a lock holder waiting on time.
 
 ## 10. Questions for review
 
@@ -909,6 +979,7 @@ No production activation follows from mocks or two implementations agreeing.
 | 4. Enrollment projection | `TestInvalidMirrorFencesWholeLoad`, `TestUnapprovedCommitRefused`, `TestTombstoneHistoryCannotDisappear`, `TestReservedSigsWinsSnapshotWide` | `TestOfflineEnrollmentSignedCommitAccepted`; unchanged P/R and approved E1 rotation. |
 | 5. Journal/witness proof | `TestWriterCannotAppendWitness`, `TestStaleChallengeRefused`, `TestUnresolvedIntentFences`, `TestRestoredCloneCannotServe`, `TestSameHeadCheckpointForkRefused`, `TestAdvancingAnchorMissingRefused`, `TestAnchorTimeRegressionRefused`, `TestCheckpointTimeRegressionRefused`, `TestEightFieldProjectionRefused`, `TestPublicationLinkLossRefused`, `TestIntentOnlyPublicationRefused`, `TestDelayedProofExpiredRefused` | `TestExactIntentCommitResolution`, `TestLostResolutionReceiptFreshHead`, `TestAnchoredSuffixAccepted`, `TestValidatedProjectionReduced`, `TestPublicationBundleVerifiedAtIssue`; real ACL/crash/custodian/exclusion qualification, archive is not a current receipt. |
 | 6. Base snapshots/time/capacity | `TestHeadChangeStaleSnapshotRefused`, `TestHeadChangeOldSnapshotRefRefused`, `TestHeadChangeMissingRecordRefused`, `TestHeadChangeMissingReissueRefused`, `TestHeadChangeMissingPriorCheckpointRefused`, `TestHeadChangeWrongPriorCheckpointRefused`, `TestStaleSnapshotRefused`, `TestEqualIssueTimeDifferentBytesRefused`, `TestCumulativeRemovalRefused`, `TestGapRefused`, `TestSplitHeadSignalsAndRefuses`, `TestSnapshotCapacitySignalsWithoutDrop`, `TestTimeLossNoPublication` | `TestHeadChangeReissueAccepted` (P-JRN-publish-reissue at F), `TestFreshCompleteSnapshotAccepted`, `TestConsumerAgeBoundary`, `TestMatchingGossipHeadAccepted`; identical cumulative set reissued at greater issued_at, same-transaction add/revocation/1 entry and new checkpoint snapshot reference; issuer profiles, byte/count limits and provider qualification. |
+| 6a. Interval-aware time adapter before any activation | `TestPointTimeViewCannotAccept` (`O=100`, `δ=1`, `A=101` refuses because `U=A`), `TestConsumedHighWaterNotPriorWatermark`, `TestCoarseRoundingNeverAccepts` | `TestIntervalReceiptAccepted`; complete bound receipt with `L`, `U`, exclusive `A`, boot and sample id, native operation/challenge binding, distinct provider history and consumer watermark, conservative rounding with original and converted predicates (§9). Planned qualification gate, not implemented by the point-time inputs in slices 6/7. |
 | 7. S4 publisher/currentness after re-pin | `TestFreshnessMissingRefused`, `TestFreshnessStaleRefused`, `TestFreshnessWrongRootRefused`, `TestFreshnessWrongSnapshotRefused`, `TestFreshnessWrongHeadRefused`, `TestFreshnessSameSeqDifferentBindingRefused`, `TestFreshnessBackwardSeqRefused`, `TestFreshnessBackwardTimeRefused`, `TestFreshnessPredecessorMissingRefused`, `TestFreshnessHeadRaceRefused`, `TestFreshnessUnresolvedIntentRefused`, `TestSlowWitnessClosesFreshness`, `TestFreshnessHistoryOmissionRefused`, `TestRestoredFreshnessStateFences`, `TestOldS3RejectsAgedBase`, `TestFreshnessCannotReviveAuthority` | `TestFreshnessKeepsJournalHead`, `TestRealChangeUsesWitnessTransaction`, `TestAgedBaseAcceptedByVerifyFreshness`, `TestFreshnessAtomicRetry`; identical base bytes and unchanged registry/witness positions on healthy freshness; exact effects and boundaries verified, never a global old-verifier waiver. |
 | 7a. S5 receipt composition before K3/D12 | `TestReceiptWrongBindingRefused`, `TestReceiptAtExpiryRefused`, `TestReceiptExtensionRefused`, `TestReceiptAfterRestartRefused`, `TestNonFreshnessReceiptIssuerRefused`, `TestLegacyOldBaseCompositionRefused` | `TestFreshnessReceiptCompositionAccepted`, `TestCurrentSnapshotLegacyCompositionAccepted`; merged S5 producers return `Result.FreshnessReceipt`, used via Context after admitted-plan persistence; exclusive fixed expiry, R1–R3 and origin-only audit; row 1b re-pin and adapter qualification remain gates. |
 | 7b. Registry intake S5 and D42 activation | `TestQuietRegistryIntakeWithoutReceiptRefused`, `TestQuietRegistryIntakeRebuiltEvidenceRefused`, `TestRegistryIntakeWitnessUnavailableRefused`, `TestStaleGrantSnapshotWithRegistryReceiptRefused` | `TestQuietRegistryIntakeWithReceiptAccepted` (more than 60 seconds of quiet, same Evidence), `TestReissuedRegistryIntakeEvidenceAccepted`, `TestCurrentGrantSnapshotWithRegistryReceiptAccepted`; planned retaining adapter after row 1b, same whole Evidence across genuine clock updates, domain-specific submission and unchanged external-root age/D42 gate; no effects on refusal. |
