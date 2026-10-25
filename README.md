@@ -452,10 +452,11 @@ The Linux workflow runs on `ubuntu-26.04` with Go `1.26.10`, local toolchain
 selection and read-only repository permissions. Both actions are pinned to exact
 commits, checkout credentials are not retained, and full history is fetched for
 the pull request's added-line check. Pull requests and pushes to `main` run one
-40-minute job: module verification, build, vet, formatting, public hygiene, an
+60-minute job: module verification, build, vet, formatting, public hygiene, an
 explicit dependency-policy test and the verbose full suite. The full-suite
-command has a 35-minute per-package timeout to cover the storage tests. There is
+command has a 50-minute per-package timeout to cover the storage tests. There is
 no privileged-test exemption; the workflow runs the existing tests unchanged.
+These timeouts will be tuned from hosted measurements.
 Hosted checks supplement the separate review gate and do not qualify deployment.
 
 The workflow commands can also be run locally through the shared scheduling
@@ -468,7 +469,7 @@ heavy-slot --label registry -- go vet ./...
 heavy-slot --label registry -- bash -e -c 'out="$(gofmt -l .)"; test -z "$out"'
 python3 .scripts/check-hygiene.py --base <base-commit>
 heavy-slot --label registry -- go test ./internal/contracts -run '^TestDependencyPolicy$' -count=1 -v
-heavy-slot --label registry -- go test ./... -count=1 -v -timeout=35m
+heavy-slot --label registry -- go test ./... -count=1 -v -timeout=50m
 ```
 
 `.scripts/check-hygiene.py` uses Python 3 and Git to reject attribution metadata

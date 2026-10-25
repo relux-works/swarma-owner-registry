@@ -13,7 +13,7 @@ permissions:
 jobs:
   go:
     runs-on: ubuntu-26.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       GOTOOLCHAIN: local
       GOMAXPROCS: '2'
@@ -44,4 +44,4 @@ jobs:
       - name: Check dependency policy
         run: go test ./internal/contracts -run '^TestDependencyPolicy$' -count=1 -v
       - name: Test
-        run: go test ./... -count=1 -v -timeout=35m
+        run: go test ./... -count=1 -v -timeout=50m
