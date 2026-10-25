@@ -953,6 +953,359 @@ window requires a new operation-bound acknowledged receipt and qualified bounded
 handoff, without deadline renewal. Time failure never blocks the independent
 emergency stop, directly or through a lock holder waiting on time.
 
+### 9.1 Qualified-time handoff windows
+
+Status: **consumer design; all three windows inactive on Linux and macOS**.
+QT-2c uses a keyless retained-original anchor and private consumer commitment
+within one trusted process on one host, option (d). A caller digest, receipt
+decoder or copied expected tuple cannot establish that anchor. Crossing this
+trust boundary requires another reviewed profile. No secret or signing purpose
+is selected for handoff authentication. Existing signed wire formats stay closed.
+
+All current-code citations in §9.1 refer to **8b14f65d504b35d10595d0b7c4d79d5c78b0e63e**;
+line numbers are at that revision, not at this document's eventual merge head.
+Identifiers and fields introduced below are proposed consumer requirements,
+not published broker API members. The broker profile schema/template is pending;
+its eventual mapping requires joint review before codec or adapter work.
+
+#### 9.1.1 Admission, original time and per-window budgets
+
+Finish provider collection, durable settlement acknowledgment, protected
+original reads, independent witness/ancestry validation, signing-service work
+and bounded immutable copying before final locks. Retain the original operation
+start `b`, exclusive deadline `D`, boot/domain, caller UTC deadline identity and
+qualified conversion rule. Set `D <= b + 5 seconds`, intersected with every
+stricter original deadline. A scheduled refresh has an independently authorized
+schedule occurrence and original start too; its 20-second cadence is not its
+execution budget. Retries, witness waits, a new receipt and a new window never
+restart this operation deadline. Overflow in `b+5s` refuses.
+
+Exactly one qualified suspend-aware elapsed-clock read occurs after admission
+under **all** final locks, immediately before pure `VerifyWindow`. On Linux
+select `CLOCK_BOOTTIME`, which includes suspend, as documented by
+[clock_gettime(2)](https://man7.org/linux/man-pages/man2/clock_gettime.2.html).
+The verifier receives the captured integer; it has no clock, callback, provider,
+RPC, descriptor, randomness, lazy loading, I/O or mutation. Preparation captures
+are outside this one final read. Define `s` as the original bound observation in
+that clock domain, `c` as the last qualified pre-lock capture, and `m` as the
+single final read. Check same boot/domain and, in checked integer nanoseconds:
+
+```
+m >= c >= s
+f > 0; epsilon >= 0; T > 0
+m - s + f + epsilon <= T
+m + f + epsilon < D
+```
+
+`T` covers observation through the full durable endpoint, not just checker CPU.
+`f` is the enforced remaining bound from `m` through that endpoint; `epsilon`
+covers qualified mapping, conversion, capture and rate error not already charged
+elsewhere. Reject negative elapsed values, underflow, overflow or equality at D.
+The original `D`, `T` and reserve may only tighten. Never advance O, shrink the
+original delta or restart s. The receipt must already include the whole reserved
+delay in its uncertainty: write `delta = delta_source + R`, with R covering the
+qualified T/error/rate rule once. Total delta stays <=1.5 seconds and within any
+stricter policy. Verification checks coverage against that retained reservation;
+it does not add R again, refresh it or spend it in two acts. Each distinct local
+window needs new settlement/challenge/H and its own reserve within the same D.
+All §9 raw and conservative converted predicates remain mandatory, including
+`L>max(prior provider W, imported J)`, any stricter locked J, `U<A`, the admitted
+watermark rule and strictly advancing new issuance. Provider W never becomes
+the registry's prior admitted watermark.
+
+| Window profile | T, f, epsilon and reserve required before selection | Why these bounds belong to this window |
+| --- | --- | --- |
+| `registry-candidate-commit/1` (C) | `T_C`, `f_C`, `epsilon_C`, `R_C` fixed by a qualified content-size/file-count/history/device profile. Require `delta_source+R_C<=1.5s`, coverage of `m-s+f_C+epsilon_C`, and the original D. No numeric f is qualified today. | f includes pure checks, exact predecessor/use CAS, manifest and blob writes, materialization, CURRENT rename and namespace durability, and committed completion/use state. History audit and capacity preflight must finish before m under exclusions or be included explicitly in f. |
+| `registry-resolved-visibility/1` (V) | Distinct `T_V`, `f_V`, `epsilon_V`, `R_V`, collected **after** matching resolution; constrained by remaining original D and its own delta cap. No inherited C reserve or new five seconds. Values remain unqualified. | f covers final resolved-head/authority/use checks and the complete durable visibility marker/ref-pointer plus associated use commit. Witness/custodian work already spent time before entry; it is not hidden in a fresh timer. |
+| `registry-freshness/1` (F) | `T_F`, `f_F`, `epsilon_F`, `R_F` selected for the exact action (`publish` or `revalidate`) and bounded retained-history workload, under its original D/delta cap. Both action-specific bounds require qualification. | Publish includes exact bytes/history/anchor/outcome and pointer/use durability; Retry includes new time floors and use state with the original publication unchanged. Existing history copying and persistence cost cannot be treated as constant just because the input record is bounded. |
+
+These are explicit unqualified parameters, not permissive defaults. No universal
+250/1000/2000 ms allowance is assigned. The installed profile must publish finite
+values, units, maximum workload, rate/error calculation, enforcement/fence,
+qualification digest and target OS/filesystem/device. Missing any one yields
+`ActivationRefusal{handoff_unqualified}`. A percentile, timer, context, mutex,
+post-sync read or suppression of a late reply does not enforce f: a pause after
+m can let the act become durable late. Qualify an actual read-to-durability bound
+or a commit primitive honoring original D; otherwise no act is admitted.
+Emergency stop must remain independently reachable, including while outer
+operation exclusions or failed storage calls are retained.
+
+#### 9.1.2 Final locks, acts and current implementation gaps
+
+The proposed **publication exclusion** serializes C, V and F against real-head
+changes; the proposed **authority exclusion** freezes the relevant authority
+generation/read set. Those are logical requirements with no current concrete
+lock name. Qualify their implementation and lock order before an adapter:
+publication exclusion, authority exclusion, then the applicable local mutex
+below and its persistence transaction admission. A lifetime/outer sole-writer
+fence and publication quiescence may span remote phases (§6.2); final mutexes
+must not. The dependency graph must not make the outer exclusion a time/RPC
+wait on the emergency-stop path. Do not reacquire a public Store method while
+already holding its non-reentrant mutex.
+
+| Window | Exact current anchors and proposed final held/released state | Durable endpoint and release |
+| --- | --- | --- |
+| C: real-head candidate commit | `Store.mu` (`internal/store/store.go:100–109`) is acquired/deferred at `:462–463`; `s.check`, candidate and capacity checks follow at `:464–478`. The directory's lifetime nonblocking exclusive flock is acquired in `internal/store/fs_linux.go:67–77`; it is the outer local-instance fence, retained across remote phases, not a final-window mutex. Hold Store.mu and the proposed publication/authority exclusions; require the expected local state ID as well as head/sequence, native intent and unused revision. Preview at `internal/store/store.go:427–452` reserves nothing. Publisher.mu is not part of C; no provider, signer RPC or witness call under final locks. | Completion of the **whole store transaction and QTUse state**, through checked CURRENT namespace sync and exact committed state. Current write path is `internal/store/store.go:479–506`; it has no QTUse transition. Release final locks after commit or fenced refusal, before witness resolution RPC. A local commit is still private, not resolved publication. |
+| V: later resolved-head visibility | After remote matching resolution, acquire the proposed publication/authority exclusions and a new visibility persistence CAS gate against exact local C completion, witness resolution and prior public pointer. Store.mu may protect the local read set only through an explicitly reviewed internal integration; View alone releases it (`internal/store/store.go:508–515`). No visibility mutex/marker implementation currently exists: Store rejects an unchanged head (`internal/store/store.go:327–329`), and its interface disclaims external publication (`:87–95`). Publisher.mu need not be acquired; if freshness state also changes, define the common transaction/order first. | Durable atomic publication marker or public ref/pointer **and V-use state**, after matching resolution. Required file/namespace barriers and persistence acknowledgment are part of the endpoint; a pointer reservation or network acknowledgment is not it. Release final gates after this local commit or fenced refusal, before any later provider/witness activity. Never reuse C's handoff. |
+| F: Publish and Retry | `Publisher.mu` is declared at `internal/freshness/freshness.go:184–195` and held at `:315–316` through return. Add the common publication/authority exclusions and actual persistence CAS admission. Recheck resolved head and no pending intent under them, not merely supplied witness bytes; the current witness input is caller-authenticated (`:162–169`). Store.mu is not acquired by this package. Release all final gates before collection/RPC. | For Publish, exact new bytes, full history/anchor, outcome, admitted watermark, decision floor, boot, pointer and F-use commit together. Retry commits new time/use floors without another publication_seq or changed bytes/outcome (`:404–412`). State update/ack checks are `:428–450`; the persistence contract `:147–153` has **no implementation**. |
+
+Current snapshot and journal builders create private candidates, not publication
+authority (`internal/snapshot/snapshot.go:80–88`,
+`internal/journal/publication.go:28–35,135–153`). C owns their authoritative
+commit. Signer invocation is not thereby at-most-once: that stronger property
+needs its own durable signer-intent/idempotency contract.
+
+Current F invokes `Signer.Sign` under Publisher.mu
+(`internal/freshness/freshness.go:382–399`). The selected separate signer process
+(Q3) cannot be treated as bounded local pure work. Stage signing outside final
+locks and freeze exact signed bytes before the final handoff; revalidate those
+unchanged bytes inside. This needs a reviewed staged API, not a claim that today's
+Publish already implements F. Original issuance still uses its own §9 projection;
+later commit/publication revalidation neither resigns nor changes issued_at to
+the later interval's floor(L). Final collection binds the already frozen artifact,
+avoiding an operation digest that depends on its own receipt or H. If a selected
+broker codec cannot express this staging/binding without a cycle, keep it closed
+and resolve the profile with the codec owner before implementation.
+
+No residual f is bounded by the current disk path. `Store.check` audits current
+inventory (`internal/store/store.go:417–423`,
+`internal/store/recovery.go:160–183`); `disk.atomic` does a checked write, Sync,
+close, Renameat and directory sync (`internal/store/fs_linux.go:236–317`), and
+`syncDir` does directory Sync/close (`:170–191`). Blocking storage, scheduling,
+faults, suspend and growing history have no deadline argument or enforced bound;
+Commit itself takes only Request (`internal/store/store.go:70–95,455`). V lacks
+its act primitive; F lacks its backend. All three remain **handoff_unqualified**.
+
+#### 9.1.3 Native operation and window binding
+
+Define a proposed owning canonical identity codec `registry-window-intent/1`.
+Publish its closed schema, byte/length bounds and test vectors jointly with the
+broker template before use. Hash exact canonical owning-codec bytes using the
+enrolled native-operation domain. No executor Scope is reused. Encode the exact
+registry key and owner UTF-8 bytes without normalization; owner length can be
+255 bytes (§6.1), so never copy/truncate them into provider enrollment IDs.
+The protected enrollment mapping binds that full native digest to consumer,
+authority/policy/adapter, machine, purpose and continuity scope.
+
+Expected values come from protected original intent and the current **locked**
+read set. The receipt is only compared to them. Neither the receipt nor a request
+can supply its own expected authority, revisions, unused state or schedule slot.
+The identity has no H, resulting use-state digest containing H, or other circular
+post-state reference. Bind the known content candidate and expected predecessor;
+the resulting composite completion ID is computed only after H is available.
+
+| Identity field group required from the future template | C | V | F |
+| --- | --- | --- | --- |
+| Registry, exact owner, consumer enrollment/continuity scope | Exact protected native values for every window; no lossy provider-ID conversion. | Same identity as the committed content; new phase. | Same registry/owner; independent freshness namespace. |
+| Original operation | Authenticated principal, original request ID/generation and canonical argument digest; an exact retry retains that identity. | Original C operation plus exact matching resolution identity; not a newly invented request. | Protected schedule occurrence or original publication/revalidation request identity and arguments; method is `publish` or `revalidate`. |
+| Content and current read set | Exact immutable content-candidate inventory/commit, prior base, checkpoint, snapshot, journal head, next registry_seq, original issuance provenance. | Same committed content/base/checkpoint/snapshot/head, authenticated resolution and previous visibility pointer. | Frozen publication bytes/ID for publish or exact previous bytes for Retry; base, checkpoint, snapshot, resolved head and current freshness anchor/history identity. |
+| Revisions | Exact predecessor content/state ID, authority generation, visibility revision, use predecessor and current time floors. | Exact C completion ID and local/public pointer predecessor, authority generation and use predecessor. | Exact `StateID(Before)`, real-head/visibility revision, authority generation, use predecessor and current watermark/J/boot. |
+| Purpose, phase, logical window sequence | Authorized record/snapshot/checkpoint signing purposes; phase C and its fixed operation-owned slot. | Existing authorized purpose of the bound signed records and local visibility action; no new signing purpose. Phase V has its distinct operation-owned slot, linked to C. | Existing authorized freshness signing purpose for publish; Retry revalidates that same purpose without a new key/purpose. Phase F plus action and its allocated logical decision slot. |
+
+`registry_seq`, `publication_seq`, logical window sequence and use revision are
+distinct values. Only real changes advance registry_seq. F publish advances
+publication_seq, Retry does not. A replacement H cannot choose a new logical
+sequence or operation ID to evade a burned slot. The operation controller fixes
+allowed windows before preparation, allocates a next genuinely authorized
+revalidation slot under protected serialization, and retains the prior slots.
+If a profile cannot bound this allocation/history within its capacity contract,
+refuse rather than discard burn history. The current F state contains history,
+watermark/J/boot but no such ledger (`internal/freshness/freshness.go:98–105`).
+
+#### 9.1.4 Versioned use transition and frozen content decision
+
+Recommend **option (i)**: version the local transaction into immutable witnessed
+**content-candidate inventory** and later atomic **completion/use metadata**.
+This is an owner decision still open, not permission to change today's inventory.
+Option (ii), revising the inventory and witness protocol, would need an explicit
+new cross-service contract and re-review. Option (iii), a separately protected
+ledger, requires the owner to approve custody, restore authority and coupling;
+this profile does not select or create it.
+
+The reason is ordering: §6.2 freezes the candidate before witness intent, but C
+must collect its handoff after acknowledged intent and V after resolution. H
+therefore cannot be inserted into that already witnessed inventory. Collecting
+it early across a witness call, changing candidate_digest, hiding H in RequestID,
+Operation or Result, or appending an unrecognized sidecar is forbidden. Current
+local image/manifest formats are `delta-1`
+(`internal/store/store.go:117–134,150–152`) and recovery enforces exact inventory
+(`internal/store/recovery.go:150–183,291–295`); they are not this proposed split.
+
+Proposed local **QTUse/1** is carried by a newly versioned owning transaction;
+neither closed journal/checkpoint/revocation/freshness records nor witness intents
+gain a member. Its unique semantic key is:
+
+```
+(registry, exact owner, native operation identity, phase, logical window sequence)
+```
+
+H is a stored commitment **value**, never a component of that key. Retain schema
+version, exact predecessor composite revision, original operation/run/boot/start/D,
+profile/qualification and receipt/original-closure commitments, H, bound content
+candidate and resulting act/pointer identity, authority generation, time floors,
+status and exact outcome linkage. All three windows use the same key rule; their
+namespaces/phases and owning transactions stay distinct.
+
+Under the final serialization and after the one read/check, atomically compare
+the exact predecessor revision **and** the independently authenticated unused
+slot. Commit `unused(v) -> burned(v+1,H,act,outcome)` with the act in the same
+atomic durable transition. A WindowCheck is only a proposed CAS; two pure checks
+of v grant no independent uses. Missing state is not unused. Every H, including
+a different commitment, refuses for an already burned key. An uncertain attempt
+stays held/burned until exact recovery; it never returns to unused. Keep durable
+tombstones/outcomes across cleanup, restart, reboot and capacity pressure.
+
+For option (i), the owning composite commit must atomically select content,
+completion and QTUse in one committed root. The metadata binds the immutable
+content digest; the root authenticates both, using a versioned, non-circular
+encoding. The bridge must independently read/verify actual content durability,
+the exact associated committed metadata/use revision, original intent, act and
+outcome, against an independently retained monotonic completion authority before
+resolution. It cannot accept the writer's digest alone. Recovery verifies this
+whole root/lineage and independent expected revision, plus visibility, freshness
+history, provider continuity and old-instance fencing. An intact content snapshot
+beside absent, restored or conflicting metadata fences; neither local hashing nor
+the content witness alone proves that no later use/completion existed.
+
+The independent completion/visibility rollback authority and its protected
+retention/acknowledgment protocol remain an owner choice. Any remote protection
+step must occur outside final locks, yet must not leave the act/use root eligible
+for rollback or require an impossible post-commit admission renewal. If that
+cannot be demonstrated with the selected atomic protocol, option (i) remains
+unimplemented and the owner must choose a revised protocol or protected ledger.
+Current Reconcile requires an external expectedStateID
+(`internal/store/recovery.go:201–207,291–292`); F likewise requires independent
+reconciliation (`internal/freshness/freshness.go:120–153`). Those inputs do not
+already authenticate proposed QTUse. Until schema, bridge authentication,
+rollback protection, genesis/migration and recovery are approved, **C, V and F
+consume adapters stay closed**. Never synthesize an unused entry for old state.
+
+#### 9.1.5 Crash, retry and refusal mapping
+
+| Cut or race | Required behavior; no new-use grant from recovery |
+| --- | --- |
+| Act without burn | Not an accepted composite state. Fence missing/mismatched QTUse even if all content bytes survive; never reconstruct unused from an old manifest. |
+| Burn without act | Retain burned/held status and exact candidate; no second attempt with another H. Recover only the authorized exact outcome/protocol. At-most-once permission can lose availability; no generic exactly-once promise. |
+| Partial or uncertain write/sync/rename/directory sync | Retain evidence, fence and reconcile exact composite state with independent authority. A late recovered commit can retain a burn but cannot create automatic late visibility. |
+| Lost acknowledgment or duplicate after restart | Recover exact retained bytes/outcome/status; no new act or ConsumeIfUnused. Current Store returns a retained outcome at `internal/store/store.go:312–318,471–473`; distinguish this path explicitly from a new successful use. Old prepared run/window objects are discarded. |
+| Freshness retransmission versus Retry | Pure retrieval of stored bytes/status makes no new time-authority claim and burns no new slot. Current identical-input Publish rechecks an original interval without persistence (`internal/freshness/freshness.go:329–341,404–412`); that cannot be promoted to fresh qualified authority. Any currentness decision or actual renewed exposure needs a fresh F handoff/use/floor transition. Retry preserves bytes, original outcome and publication_seq while consuming its own new authorized revalidation slot; no renewal of the old H. A transport release needing time authority requires a separately bounded profile, not implicit reuse. |
+| Head A prepared, locked head B | Refuse before burn/act on any mismatching head/revision/base/authority. Release final locks, then recollect only if original D permits; never overwrite B or restart D. |
+| Restored use history or two instances | Independent completion, publication/freshness and provider continuity reconciliation plus live-instance fencing are required. An intact provider W cannot detect restored consumer-use history. Lifetime flock is only local cooperation (`internal/store/store.go:98–99`), not a clone fence. |
+| Reboot or suspend across D | Discard old-boot handoffs, preserve all burns/floors and reconcile independently before new evidence. Suspend counts against D. No cross-boot elapsed comparison or deadline reconstruction from wall time. |
+
+The future broker's fixed `HandoffRefusal` reasons preserve precise causes:
+`boot`, `deadline_binding`, `deadline`, `reserve`, `overflow`, `interval`,
+`authority`, `operation`, `window`, `replay`, `run`, `continuity`,
+`unauthenticated` and `original_missing` as applicable. Check failure yields a
+zero candidate and no writes. These are proposed shared typed reasons, not
+current registry public codes. Map handoff/time qualification failures outward
+to existing `time_unavailable`; a mismatching real head maps `head_conflict`,
+conflicting native retry maps `request_conflict`, unknown store durability maps
+`state_unavailable`, and F uses `freshness_state_unavailable` or
+`freshness_persistence_unavailable` for those corresponding failures. Existing
+store codes are at `internal/store/store.go:25–42`; F's time/persistence refusals
+are at `internal/freshness/freshness.go:341–343,404–409,432–433`. Preserve the
+actual narrower verifier refusal where applicable. No broad new wire code is
+needed. Inactive construction returns the proposed shared typed
+`ActivationRefusal{handoff_unqualified}` (or `handoff_unselected` for an
+unselected profile); it cannot silently fall back to point time or a raw receipt.
+
+#### 9.1.6 Mandatory macOS profile
+
+The same C/V/F logical windows require native parity; Linux activation is not
+evidence of it. Select one fixed `mach_continuous_time()` read after all native
+equivalent final exclusions. Apple's pinned
+[Mach header](https://github.com/apple-oss-distributions/xnu/blob/xnu-11215.1.10/osfmk/mach/mach_time.h#L56-L60)
+defines advancement during sleep. Preload the timebase; convert ticks with checked
+rational arithmetic, current elapsed rounded upward and deadline downward.
+No `mach_absolute_time`, sleep-excluding clock or wall-time substitution. Capture
+and validate `kern.bootsessionuuid` outside final locks through protected native
+sysctl; the pinned [XNU declaration](https://github.com/apple-oss-distributions/xnu/blob/xnu-11215.1.10/bsd/kern/kern_sysctl.c#L2686-L2688)
+is read-only. Boot UUID alone does not fence a restored machine image.
+
+Use a separately reviewed continuous-clock domain/platform mapping; do not label
+Mach ticks as Linux BOOTTIME or silently widen an existing closed receipt codec.
+Keep original UTC identity, boot, start, D, T, f, epsilon and reserve, with the
+same inequalities and endpoint. The broker's native platform representation and
+mapping qualification remain gaps.
+
+| Native window | Required act and durability |
+| --- | --- |
+| C | Exact content/completion/use root transaction, checked full writes and file flushes, same-filesystem atomic root rename, checked close and separately qualified namespace durability for every created/renamed dependency. |
+| V | Durable resolved visibility marker/ref-pointer via same-filesystem atomic rename, with V-use in the same transaction and its directory/persistence barriers. |
+| F | Publish: exact history/anchor/outcome/time/use and atomic publication pointer. Retry: atomic new floors/use retaining exact prior publication. Both require the actual persistence commit and all relevant namespace barriers. |
+
+Require checked `fcntl(F_FULLFSYNC)` for written durable files, plus independently
+qualified directory/rename ordering. Apple's [fcntl manual](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fcntl.2.html)
+describes the device-flush request; it neither bounds completion nor guarantees
+that every device honors it. No silent fsync-only fallback. Apple's
+[rename manual](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/rename.2.html)
+requires the same filesystem and describes replacement-name continuity; namespace
+atomicity is not the full durable multi-file/use commit. Qualify the exact native
+OS/filesystem/device, full flush and directory barriers, locks, independent
+restore/instance fence, crash recovery, suspend and post-read f. The current
+store path is explicitly Linux-specific (`internal/store/fs_linux.go:1–13,43–77,236–317`);
+no Darwin store/clock/use adapter or native qualification is supplied here.
+**handoff_unqualified on both platforms** remains the disposition.
+
+#### 9.1.7 Broker interfaces required before implementation
+
+The protected **original reader** must return exact receipt/settlement/source
+bytes, full bounded original manifest/closure and authenticated settlement
+association, protected descriptor/object identities, validator version and
+enrollment/scope/operation/challenge/generation bindings. It must establish live
+provenance and immutable retention, reject holds/steps or missing originals, and
+prevent unobserved authority/original invalidation through the admitted window.
+It does not accept arbitrary saved receipts as live collection. Its factory must
+retain private provenance; a public constructor from bytes/hash is insufficient.
+
+The independent **witness interface** must establish the current checkpoint,
+exact receipt/record association, ancestry and authoritative acknowledgment under
+original D, with explicit store/witness restore exclusions. A witness-head digest
+is not an acknowledgment. Fetch, reconciliation and unbounded history traversal
+stay outside final locks. Returned bounded owned evidence must remain valid under
+the installed invalidation/fencing model. Neither interface replaces the
+registry's independent use/publication rollback protection.
+
+The template must accommodate the native identity groups in §9.1.3, phase/action,
+logical sequence and exact predecessor revisions, original boot/domain/start/D
+and UTC/mapping identity, s/c/m admission provenance, T/f/epsilon/reserve and
+qualification identity, exact receipt/closure/validator references, authenticated
+anchor, private run and H. m is the local admission input, not a receipt-supplied
+freshness assertion. Preserve current receipt and closed consumer wire codecs;
+resolve any unsupported field or platform domain with the broker owner rather
+than invent an extension. Production reader, witness, preparation and admission
+implementations remain inactive and return typed activation refusals.
+
+#### 9.1.8 Paired controls — all PENDING
+
+These are design acceptance witnesses, **not executed tests or qualification**.
+Every negative asserts its named refusal/fence, no forbidden act or duplicate
+position, and the exact permitted burned/held state; the nearby positive checks
+the same candidate with just the violated condition repaired. Arithmetic fixtures
+do not qualify real scheduling/storage. Run native pause/crash controls only
+against the selected actual mechanism in isolated fixtures.
+
+| Planned control pair | Negative witness | Valid control | Status |
+| --- | --- | --- | --- |
+| `TestWindowStaleCapture` | Same old c, but delay final-lock admission beyond original D; actual fresh m refuses deadline. A checker using only c misses it. | Same inputs, timely actual m and qualified residual endpoint. | PENDING |
+| `TestWindowDoubleCheck` | Two checks from one unused predecessor both produce candidates; a second durable consume must fail revision/replay with one act total. | One check/CAS against unused v commits act/use once. | PENDING |
+| `TestWindowTimelyAndLateAct` | Pause immediately after m through D or suspend across it; the actual selected primitive must prevent late durable act. A late reply suppressed after an already late act fails this control. | Same actual primitive commits complete act/use before D. Unknown f makes both unqualified. | PENDING |
+| `TestWindowDeadlineEquality` | `m+f+epsilon == D` refuses deadline; elapsed/reserve equality alone cannot override it. | Same workload with strict endpoint `<D` and elapsed `<=T`. | PENDING |
+| `TestWindowLockedHeadChanged` | Prepare head A, then admit locked B; head/revision refusal before use or publication. | Matching A with exact same locked read set. | PENDING |
+| `TestWindowBurnedDifferentH` | Burn key with H1, present H2/new challenge for same key; replay refuses and retains H1/outcome. | Independently authorized next logical slot with fresh H and exact predecessor. | PENDING |
+| `TestWindowLostCommitAck` | Lose ack after act/use durable commit; restart returns exact stored outcome, no consume or act again. | Original acknowledged commit returns the identical bytes/outcome. | PENDING |
+| `TestWindowFreshnessRevalidation` | Reuse old H for currentness, or allocate a new publication position on Retry; replay/contract refusal with unchanged bytes/position. | Fresh F evidence and new authorized revalidation slot atomically advance floors/use only; retrieval/status retransmission grants no new time authority. | PENDING |
+| `TestWindowUseMetadataMissing` | Intact content but absent/mismatched use/completion metadata fences; missing is not unused. | Intact atomic composite and independent expected revision recover exact state. | PENDING |
+| `TestWindowPostIntentInventoryChanged` | Add later H into frozen content inventory; candidate mismatch refuses, no altered witness intent. | Frozen content unchanged; approved versioned completion binds H in the atomic composite. | PENDING |
+| `TestWindowUseRestoreDespiteProviderW` | Restore old use ledger while provider W stays current, or start competing instance; independent consumer authority fences. | Current consumer/provider histories, exact revisions and sole live instance reconcile. | PENDING |
+| `TestWindowOriginalOrBudgetSubstitution` | Swap receipt/original, owner bytes, operation/purpose/generation, boot, deadline or reserve; intended authentication/binding/overflow refusal, no writes. | Exact protected closure/intent and original qualified budget pass. | PENDING |
+
+Future gates must demonstrate detection with bounded plants: stale-c-only
+admission, omitted unused-revision CAS, H-in-key, late-act acceptance, missing-use
+acceptance and restored-use acceptance. Record the specific named failing test;
+a setup failure, unapplied plant or survivor is not detection. All remain PENDING.
+
 ## 10. Questions for review
 
 Placement, root separation, E1 and registrar Git consumption remain settled.
@@ -978,6 +1331,9 @@ recommendations without reopening accepted S4 decisions. Activation is separate.
 | Q15: D40 state and bounds | Decided, recorded 2026-10-25; F §§2.9, 6–7 and D40. Explicit authorized publication genesis, exact FreshnessAnchor and WitnessReadAt, independent 64-publication/532,480-byte bounds; durable state before use. |
 | Q16: D41 recovery/composition | Decided, 2026-10-25: S5 merged at `5f4e7435d75697385ff6ce15a7501ac6f31c8ea5`, S5 §§2.10, 6–7 and D41 (closed). Explicit separate re-anchor keeps the accepted skipped-span fork-detection cost, full retained history and endpoint audit. Merged receipt composition in §5.3 uses the admitted anchor and whole Evidence, with no receipt-failure fallback. Code re-pin, adapter qualification and K3/D12 activation remain separate gates; no weaker legacy Context is authorized. |
 | Q17: D42 external-root currentness | Open design question, recorded 2026-10-25, owned by the owner and the content review, due before the broker D12 adapter. The current D32/S5 scope is unchanged. Three alternatives: (a) the root signs snapshot content only when it changes; the registry attests currency with its own freshness/1 and has no authority to alter that content. A compromised registry-owner key could withhold a newer root snapshot; the witness and full history mitigate this only if the root checks that its own submission was journaled. Freshness/1 at F (f76a400) binds a single snapshot, so this alternative requires a format change by the format owner. (b) each root maintains its own freshness/1 chain, signed by that root. This preserves D32 separation but requires an online freshness signer per root, separate from the content key. (c) the roots remain online and reissue snapshots within max_age; this is a custodian requirement. D42 remains an activation gate for grant, D33 service-key and device intake. No option is selected and no external-root extension profile is approved here. |
+| Q18: QT-2c local content/use format | Open with the owner before any consume adapter: recommend §9.1.4 option (i), versioned frozen content versus atomic completion/use metadata; alternatives are an explicit witness-protocol revision or an owner-approved separate protected ledger. Approve schema, capacity, genesis/migration, bridge authentication, independent monotonic completion/visibility authority, retention and exact recovery. No choice is implemented. |
+| Q19: QT-2c durable endpoint timing | Durable act plus use, one post-admission suspend-aware read, original <=5-second-or-stricter D and same-process keyless trust are settled requirements. Open with platform and storage owners: actual enforced f or deadline-honoring act for each C/V/F workload, finite T/epsilon/reserve qualification, final common exclusion/order and emergency-stop independence. Unknown bounds keep all windows handoff_unqualified. |
+| Q20: QT-2c provider/template and native parity | Open jointly with broker/platform owners: protected original reader and independent witness contracts, profile/identity codec and frozen-artifact signing staging, original deadline/rate mapping, Linux and mandatory macOS clock/boot representation, native full-flush/rename durability and instance/restore fencing. A template must map the required fields without widening closed wire codecs; no accepting implementation is authorized by this design. |
 
 ## 11. Implementation slices and evidence plan
 
@@ -996,6 +1352,9 @@ No production activation follows from mocks or two implementations agreeing.
 | 5. Journal/witness proof | `TestWriterCannotAppendWitness`, `TestStaleChallengeRefused`, `TestUnresolvedIntentFences`, `TestRestoredCloneCannotServe`, `TestSameHeadCheckpointForkRefused`, `TestAdvancingAnchorMissingRefused`, `TestAnchorTimeRegressionRefused`, `TestCheckpointTimeRegressionRefused`, `TestEightFieldProjectionRefused`, `TestPublicationLinkLossRefused`, `TestIntentOnlyPublicationRefused`, `TestDelayedProofExpiredRefused` | `TestExactIntentCommitResolution`, `TestLostResolutionReceiptFreshHead`, `TestAnchoredSuffixAccepted`, `TestValidatedProjectionReduced`, `TestPublicationBundleVerifiedAtIssue`; real ACL/crash/custodian/exclusion qualification, archive is not a current receipt. |
 | 6. Base snapshots/time/capacity | `TestHeadChangeStaleSnapshotRefused`, `TestHeadChangeOldSnapshotRefRefused`, `TestHeadChangeMissingRecordRefused`, `TestHeadChangeMissingReissueRefused`, `TestHeadChangeMissingPriorCheckpointRefused`, `TestHeadChangeWrongPriorCheckpointRefused`, `TestStaleSnapshotRefused`, `TestEqualIssueTimeDifferentBytesRefused`, `TestCumulativeRemovalRefused`, `TestGapRefused`, `TestSplitHeadSignalsAndRefuses`, `TestSnapshotCapacitySignalsWithoutDrop`, `TestTimeLossNoPublication` | `TestHeadChangeReissueAccepted` (P-JRN-publish-reissue at F), `TestFreshCompleteSnapshotAccepted`, `TestConsumerAgeBoundary`, `TestMatchingGossipHeadAccepted`; identical cumulative set reissued at greater issued_at, same-transaction add/revocation/1 entry and new checkpoint snapshot reference; issuer profiles, byte/count limits and provider qualification. |
 | 6a. Interval-aware time adapter before any activation | `TestPointTimeViewCannotAccept` (`O=100`, `δ=1`, `A=101` refuses because `U=A`), `TestConsumedHighWaterNotPriorWatermark`, `TestCoarseRoundingNeverAccepts` | `TestIntervalReceiptAccepted`; complete bound receipt with `L`, `U`, exclusive `A`, boot and sample id, native operation/challenge binding, distinct provider history and consumer watermark, conservative rounding with original and converted predicates (§9). This slice implements the pure interval projection for slices 6/7. The timeconf adapter, complete receipt validation and operation/challenge binding remain planned qualification gates. |
+| 6b. QT-2c schemas/use and frozen-content decision (PENDING) | `TestWindowDoubleCheck`, `TestWindowBurnedDifferentH`, `TestWindowUseMetadataMissing`, `TestWindowPostIntentInventoryChanged`, `TestWindowUseRestoreDespiteProviderW` | Exact unused-revision composite commit and independently reconciled content/completion/use history (§9.1.4, §9.1.8); Q18 owner approval and broker template first. No code/codec/adapter activation. |
+| 6c. C/V/F final-window integration (PENDING) | `TestWindowLockedHeadChanged`, `TestWindowLostCommitAck`, `TestWindowFreshnessRevalidation`, `TestWindowOriginalOrBudgetSubstitution` | Exact matching locked candidate, recovered original outcome, fresh Retry floors without another publication position; §9.1.2–§9.1.5 paired controls. All named current locks plus approved common exclusions; staged signing/reader/witness work outside them. |
+| 6d. Linux and macOS durable timing qualification (PENDING) | `TestWindowStaleCapture`, `TestWindowTimelyAndLateAct`, `TestWindowDeadlineEquality` | Actual on-time durable act/use with one native suspend-aware admission read and qualified f for each window/OS, plus applied narrowing controls (§9.1.8). Synthetic arithmetic alone cannot close Q19/Q20 or handoff_unqualified. |
 | 7. S4 publisher/currentness after re-pin | `TestFreshnessMissingRefused`, `TestFreshnessStaleRefused`, `TestFreshnessWrongRootRefused`, `TestFreshnessWrongSnapshotRefused`, `TestFreshnessWrongHeadRefused`, `TestFreshnessSameSeqDifferentBindingRefused`, `TestFreshnessBackwardSeqRefused`, `TestFreshnessBackwardTimeRefused`, `TestFreshnessPredecessorMissingRefused`, `TestFreshnessHeadRaceRefused`, `TestFreshnessUnresolvedIntentRefused`, `TestSlowWitnessClosesFreshness`, `TestFreshnessHistoryOmissionRefused`, `TestRestoredFreshnessStateFences`, `TestOldS3RejectsAgedBase`, `TestFreshnessCannotReviveAuthority` | `TestFreshnessKeepsJournalHead`, `TestRealChangeUsesWitnessTransaction`, `TestAgedBaseAcceptedByVerifyFreshness`, `TestFreshnessAtomicRetry`; identical base bytes and unchanged registry/witness positions on healthy freshness; exact effects and boundaries verified, never a global old-verifier waiver. |
 | 7a. S5 receipt composition before K3/D12 | `TestReceiptWrongBindingRefused`, `TestReceiptAtExpiryRefused`, `TestReceiptExtensionRefused`, `TestReceiptAfterRestartRefused`, `TestNonFreshnessReceiptIssuerRefused`, `TestLegacyOldBaseCompositionRefused` | `TestFreshnessReceiptCompositionAccepted`, `TestCurrentSnapshotLegacyCompositionAccepted`; merged S5 producers return `Result.FreshnessReceipt`, used via Context after admitted-plan persistence; exclusive fixed expiry, R1–R3 and origin-only audit; row 1b re-pin and adapter qualification remain gates. |
 | 7b. Registry intake S5 and D42 activation | `TestQuietRegistryIntakeWithoutReceiptRefused`, `TestQuietRegistryIntakeRebuiltEvidenceRefused`, `TestRegistryIntakeWitnessUnavailableRefused`, `TestStaleGrantSnapshotWithRegistryReceiptRefused` | `TestQuietRegistryIntakeWithReceiptAccepted` (more than 60 seconds of quiet, same Evidence), `TestReissuedRegistryIntakeEvidenceAccepted`, `TestCurrentGrantSnapshotWithRegistryReceiptAccepted`; planned retaining adapter after row 1b, same whole Evidence across genuine clock updates, domain-specific submission and unchanged external-root age/D42 gate; no effects on refusal. |

@@ -4,6 +4,11 @@ An owner registry service for the trust node, written in Go. The accepted
 [service design](design/owner-registry.md) defines the later record, publication
 and recovery work.
 
+The proposed [qualified-time handoff profiles](design/owner-registry.md#91-qualified-time-handoff-windows)
+define separate candidate-commit, resolved-visibility and freshness windows.
+Their versioned use-state, timing enforcement and mandatory macOS parity remain
+review and qualification gates; all three profiles remain inactive.
+
 The first two slices implement protected contract pins, activation checks and
 a pure signed-record intake adapter. A separate enrollment adapter orchestrates
 complete approved exports through a caller-qualified transaction. A local
