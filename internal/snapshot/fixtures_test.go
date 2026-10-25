@@ -10,11 +10,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/relux-works/swarma-owner-registry/internal/journal"
+	"github.com/relux-works/swarma-owner-registry/internal/qtime"
 	"github.com/relux-works/waggle/record"
 	"github.com/relux-works/waggle/verifier"
 )
@@ -176,7 +179,7 @@ func text(v any) string           { s, _ := v.(string); return s }
 func number(v any) int64          { n, _ := v.(int64); return n }
 func object(v any) map[string]any { m, _ := v.(map[string]any); return m }
 
-func publicationFixture(t *testing.T, name string) (verifier.Context, journal.Publication, Retained, TimeSample, []byte) {
+func publicationFixture(t *testing.T, name string) (verifier.Context, journal.Publication, Retained, qtime.Interval, []byte) {
 	t.Helper()
 	f := loadFixture(t, name)
 	c, entries, cp := fixtureProof(t, f)
@@ -199,7 +202,7 @@ func publicationFixture(t *testing.T, name string) (verifier.Context, journal.Pu
 	if parseObject(t, old)["id"] != object(parseObject(t, prior)["body"])["snapshot"] {
 		t.Fatal("prior snapshot differs from protected checkpoint")
 	}
-	state := Retained{Available: true, RollbackSafe: true, Registry: o.Registry, Owner: o.Owner, Snapshot: old, Checkpoint: prior}
+	state := Retained{Available: true, RollbackSafe: true, Registry: o.Registry, Owner: o.Owner, Snapshot: old, Checkpoint: prior, Watermark: "2026-01-01T00:01:00Z", DecisionFloor: "0"}
 	facts = object(f["fixture"])
 	row := object(object(facts["revocations"])[o.Registry])
 	prior = nil
@@ -207,10 +210,10 @@ func publicationFixture(t *testing.T, name string) (verifier.Context, journal.Pu
 		prior = decode(t, v)
 	}
 	p := journal.Publication{Entries: entries, CheckpointBody: wire(t, parseObject(t, cp)["body"]), PriorCheckpoint: prior, Witness: projection, Snapshot: journal.SnapshotFacts{Bytes: decode(t, row["snapshot"]), Available: row["availability"] == "available", RollbackSafe: row["rollback_safe"] == true, MaxAge: number(row["max_age"])}}
-	sample := TimeSample{Now: text(facts["now"]), Watermark: text(facts["watermark"]), AuthorityUntil: text(object(facts["time"])["authority_until"]), Confident: true, WatermarkAvailable: true}
+	sample := intervalAt(t, text(facts["now"]))
 	return c, p, state, sample, cp
 }
-func prepareRefused(t *testing.T, c verifier.Context, p journal.Publication, s Retained, clock TimeSample, want string) {
+func prepareRefused(t *testing.T, c verifier.Context, p journal.Publication, s Retained, clock qtime.Interval, want string) {
 	t.Helper()
 	beforeS := wire(t, map[string]any{"snapshot": base64.RawURLEncoding.EncodeToString(s.Snapshot), "checkpoint": base64.RawURLEncoding.EncodeToString(s.Checkpoint)})
 	got, e := Prepare(c, fixtureSigner(t), s, clock, p)
@@ -221,4 +224,15 @@ func prepareRefused(t *testing.T, c verifier.Context, p journal.Publication, s R
 	if !bytes.Equal(beforeS, wire(t, map[string]any{"snapshot": base64.RawURLEncoding.EncodeToString(s.Snapshot), "checkpoint": base64.RawURLEncoding.EncodeToString(s.Checkpoint)})) {
 		t.Fatal("refusal changed retained originals")
 	}
+}
+
+// Explicit synthetic interval; qualification and boot continuity are caller contracts.
+func intervalAt(t *testing.T, when string) qtime.Interval {
+	t.Helper()
+	at, e := time.Parse(time.RFC3339, when)
+	if e != nil {
+		t.Fatal(e)
+	}
+	n := strconv.FormatInt(at.UnixNano(), 10)
+	return qtime.Interval{Observed: n, Lower: n, Upper: n, AuthorityUntil: strconv.FormatInt(at.Add(300*time.Second).UnixNano(), 10), PriorHighWater: "0", HighWater: n, JournalFloor: "0", Boot: "boot-a", SampleID: "sample-a"}
 }

@@ -10,12 +10,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	f "github.com/relux-works/swarma-owner-registry/internal/freshness"
 	"github.com/relux-works/swarma-owner-registry/internal/journal"
+	"github.com/relux-works/swarma-owner-registry/internal/qtime"
 	"github.com/relux-works/waggle/record"
 	"github.com/relux-works/waggle/verifier"
 )
@@ -185,7 +188,7 @@ func initial(t *testing.T) f.State {
 	t.Helper()
 	d := load(t, "P-FR-genesis")
 	a := anchor(t, object(object(d["fixture"])["freshness_anchor"]))
-	return f.State{Genesis: a, Anchor: a, Watermark: "2026-01-01T00:03:00Z"}
+	return f.State{Genesis: a, Anchor: a, Watermark: "2026-01-01T00:03:00Z", DecisionFloor: "-1000000000", Boot: "boot-a"}
 }
 func input(t *testing.T) f.Input { t.Helper(); return inputNamed(t, "P-FR-genesis") }
 func inputNamed(t *testing.T, name string) f.Input {
@@ -195,12 +198,11 @@ func inputNamed(t *testing.T, name string) f.Input {
 	a := object(v["freshness_anchor"])
 	row := object(object(v["revocations"])[text(a["registry_id"])])
 	request := object(d["input"])
-	return f.Input{IDs: stringsOf(request["ids"]), Keys: stringsOf(request["keys"]), Context: c, IssuedAt: text(v["now"]), Watermark: text(v["watermark"]), Checkpoint: cp, Snapshot: journal.SnapshotFacts{Bytes: decode(t, row["snapshot"]), Available: true, RollbackSafe: true, MaxAge: 60}, Witness: f.WitnessRead{Fact: c.JournalWitness, ReadAt: text(v["witness_read_at"]), Original: wire(t, v["journal_witness"])}}
+	return f.Input{IDs: stringsOf(request["ids"]), Keys: stringsOf(request["keys"]), Context: c, Time: intervalAt(t, text(v["now"])), Checkpoint: cp, Snapshot: journal.SnapshotFacts{Bytes: decode(t, row["snapshot"]), Available: true, RollbackSafe: true, MaxAge: 60}, Witness: f.WitnessRead{Fact: c.JournalWitness, ReadAt: text(v["witness_read_at"]), Original: wire(t, v["journal_witness"])}}
 }
 func at(t *testing.T, in f.Input, when string) f.Input {
 	t.Helper()
-	in.IssuedAt = when
-	in.Watermark = when
+	in.Time = intervalAt(t, when)
 	in.Context.Now = fact(t, when)
 	in.Context.Time = fact(t, map[string]any{"trusted": true, "fresh": true, "authority_until": "2026-01-02T00:00:00Z"})
 	in.Witness.ReadAt = when
@@ -304,3 +306,24 @@ func stateRefused(t *testing.T, p *f.Publisher, err error) {
 type signerFunc func([]byte) ([]byte, error)
 
 func (s signerFunc) Sign(b []byte) ([]byte, error) { return s(b) }
+
+// Synthetic explicit interval, not a qualified provider receipt. Each later
+// second imports the preceding upper floor and uses a distinct sample identity.
+func intervalAt(t *testing.T, when string) qtime.Interval {
+	t.Helper()
+	at, e := time.Parse(time.RFC3339, when)
+	if e != nil {
+		t.Fatal(e)
+	}
+	n := strconv.FormatInt(at.UnixNano(), 10)
+	floor := strconv.FormatInt(at.Add(-time.Second).UnixNano(), 10)
+	return qtime.Interval{Observed: n, Lower: n, Upper: n, AuthorityUntil: strconv.FormatInt(at.Add(300*time.Second).UnixNano(), 10), PriorHighWater: floor, HighWater: n, JournalFloor: floor, Boot: "boot-a", SampleID: "sample-" + n}
+}
+func issueAt(t *testing.T, in f.Input) string {
+	t.Helper()
+	v, e := in.Time.Project("1970-01-01T00:00:00Z", in.Time.JournalFloor)
+	if e != nil {
+		t.Fatal(e)
+	}
+	return v.IssuedAt
+}

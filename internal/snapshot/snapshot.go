@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/relux-works/swarma-owner-registry/internal/journal"
+	"github.com/relux-works/swarma-owner-registry/internal/qtime"
 	"github.com/relux-works/waggle/record"
 	"github.com/relux-works/waggle/verifier"
 )
@@ -61,22 +62,10 @@ type Entry struct{ Kind, ID, From string }
 // service. All older originals remain in its durable inventory; these APIs
 // neither replace that inventory nor establish rollback safety from a boolean.
 type Retained struct {
-	Available, RollbackSafe bool
-	Registry, Owner         string
-	Snapshot, Checkpoint    []byte
-}
-
-// TimeSample is a fresh caller-qualified decision sample from the shared time
-// provider. Confident means its conservative uncertainty and continuity passed
-// the protected policy; AuthorityUntil is its exclusive authority endpoint.
-// Now and Watermark are exact UTC seconds, with zero backward tolerance.
-// A production adapter must acquire fresh confidence at each call and retain
-// watermark/hold history independently. These fields do not implement timeconf
-// or cross-process continuity and must never come from request data. No local
-// clock, collector, environment source or cached Context time is consulted.
-type TimeSample struct {
-	Now, Watermark, AuthorityUntil string
-	Confident, WatermarkAvailable  bool
+	Available, RollbackSafe  bool
+	Registry, Owner          string
+	Snapshot, Checkpoint     []byte
+	Watermark, DecisionFloor string
 }
 
 type Issued struct {
@@ -85,6 +74,7 @@ type Issued struct {
 	// Advisory local thresholds: at least 56 entries or 7 KiB signed bytes.
 	// Hard limits remain independent: 64 entries AND 8192 whole signed bytes.
 	CapacityWarning bool
+	Time            qtime.Projection
 }
 
 // Candidate contains one complete, owned journal transaction candidate. A
@@ -95,6 +85,7 @@ type Candidate struct {
 	Publication     journal.Prepared
 	Result          verifier.Result
 	CapacityWarning bool
+	Time            qtime.Projection
 }
 
 func timestamp(s string) bool {
@@ -104,15 +95,19 @@ func timestamp(s string) bool {
 	t, e := time.Parse("2006-01-02T15:04:05Z", s)
 	return e == nil && t.Year() >= 1970 && t.Year() <= 9999 && t.Format("2006-01-02T15:04:05Z") == s
 }
-func timeContext(c verifier.Context, t TimeSample) (verifier.Context, error) {
-	if !t.Confident || !t.WatermarkAvailable || !timestamp(t.Now) || !timestamp(t.Watermark) || !timestamp(t.AuthorityUntil) || t.Now < t.Watermark || t.Now >= t.AuthorityUntil {
-		return verifier.Context{}, fail(TimeUnavailable)
+func project(s Retained, t qtime.Interval) (qtime.Projection, error) {
+	v, e := t.Project(s.Watermark, s.DecisionFloor)
+	if e != nil {
+		return qtime.Projection{}, fail(TimeUnavailable)
 	}
+	return v, nil
+}
+func timeContext(c verifier.Context, t qtime.Projection) verifier.Context {
 	c.Now, _ = verifier.Present(t.Now)
 	c.Watermark, _ = verifier.Present(t.Watermark)
 	c.WatermarkAvailable, _ = verifier.Present(true)
 	c.Time, _ = verifier.Present(map[string]any{"trusted": true, "fresh": true, "authority_until": t.AuthorityUntil})
-	return c, nil
+	return c
 }
 func readObject(raw []byte) (map[string]any, error) {
 	v, e := record.Parse(raw, MaxBytes, 16)
@@ -254,7 +249,7 @@ func cumulative(old, next []Entry) error {
 	}
 	return nil
 }
-func transition(s Retained, old map[string]any, oldRows []Entry, raw []byte, t TimeSample) error {
+func transition(s Retained, old map[string]any, oldRows []Entry, raw []byte, t qtime.Projection) error {
 	b, rows, e := snapshot(raw, s.Registry)
 	if e != nil {
 		return e
@@ -280,9 +275,11 @@ func warning(count, size int) bool { return count >= 56 || size >= 7168 }
 // Issue signs a strictly newer complete private candidate, preserving every
 // retained entry and never moving its effective time later. Entries is the
 // caller's protected current cumulative set, not a received claim of completeness.
+// issuedAt is an assertion of floor(L), never an independent clock input.
 // Reordering changes content; no entries are sorted, deduplicated or dropped.
-func Issue(signer journal.Signer, s Retained, t TimeSample, issuedAt string, rows []Entry) (*Issued, error) {
-	if _, e := timeContext(verifier.Context{}, t); e != nil {
+func Issue(signer journal.Signer, s Retained, t qtime.Interval, issuedAt string, rows []Entry) (*Issued, error) {
+	clock, e := project(s, t)
+	if e != nil {
 		return nil, e
 	}
 	old, oldRows, e := retained(s)
@@ -320,11 +317,11 @@ func Issue(signer journal.Signer, s Retained, t TimeSample, issuedAt string, row
 	if issuedAt < stringValue(old["issued_at"]) {
 		return nil, fail(Rollback)
 	}
-	if issuedAt > t.Watermark {
+	if issuedAt != clock.IssuedAt || issuedAt > clock.Watermark {
 		return nil, fail(TimeUnavailable)
 	}
 	at, _ := time.Parse(time.RFC3339, issuedAt)
-	now, _ := time.Parse(time.RFC3339, t.Now)
+	now, _ := time.Parse(time.RFC3339, clock.Now)
 	if now.Sub(at) > 60*time.Second {
 		return nil, fail(Code("journal_unavailable"))
 	}
@@ -347,7 +344,7 @@ func Issue(signer journal.Signer, s Retained, t TimeSample, issuedAt string, row
 	if !bytes.Equal(actual, rawBody) {
 		return nil, fail(Code("signer_signature_invalid"))
 	}
-	return &Issued{id, bytes.Clone(raw), warning(len(rows), len(raw))}, nil
+	return &Issued{id, bytes.Clone(raw), warning(len(rows), len(raw)), clock}, nil
 }
 
 // Prepare revalidates time, cumulative continuity and exact prior bindings, then
@@ -356,11 +353,12 @@ func Issue(signer journal.Signer, s Retained, t TimeSample, issuedAt string, row
 // greater issue time even if its cumulative set is identical. Received entries
 // are never repaired or synthesized to conceal gaps. Refusal returns nil and
 // exposes no persistence plan; all caller inputs and retained originals survive.
-func Prepare(c verifier.Context, signer journal.Signer, s Retained, t TimeSample, p journal.Publication) (*Candidate, error) {
-	c, e := timeContext(c, t)
+func Prepare(c verifier.Context, signer journal.Signer, s Retained, t qtime.Interval, p journal.Publication) (*Candidate, error) {
+	clock, e := project(s, t)
 	if e != nil {
 		return nil, e
 	}
+	c = timeContext(c, clock)
 	old, oldRows, e := retained(s)
 	if e != nil {
 		return nil, e
@@ -379,7 +377,7 @@ func Prepare(c verifier.Context, signer journal.Signer, s Retained, t TimeSample
 		}
 		return nil, fail(Rollback)
 	}
-	if e = transition(s, old, oldRows, p.Snapshot.Bytes, t); e != nil {
+	if e = transition(s, old, oldRows, p.Snapshot.Bytes, clock); e != nil {
 		return nil, e
 	}
 	prepared, r := journal.BuildPublication(c, signer, p)
@@ -392,7 +390,7 @@ func Prepare(c verifier.Context, signer journal.Signer, s Retained, t TimeSample
 		return nil, fail(Gap)
 	}
 	_, rows, _ := snapshot(p.Snapshot.Bytes, s.Registry)
-	return &Candidate{prepared, r, warning(len(rows), len(p.Snapshot.Bytes))}, nil
+	return &Candidate{prepared, r, warning(len(rows), len(p.Snapshot.Bytes)), clock}, nil
 }
 
 // Change supplies a caller-authorized record body and witnessed anchor for one
@@ -409,8 +407,9 @@ type Change struct {
 
 // Build constructs the entire anchored record/reissue transaction and admits it
 // through Prepare. It never makes an idle publication or persists its candidate.
-func Build(c verifier.Context, signer journal.Signer, s Retained, t TimeSample, change Change) (*Candidate, error) {
-	if _, e := timeContext(c, t); e != nil {
+func Build(c verifier.Context, signer journal.Signer, s Retained, t qtime.Interval, change Change) (*Candidate, error) {
+	clock, e := project(s, t)
+	if e != nil {
 		return nil, e
 	}
 	anchor, e := readObject(change.Anchor)
@@ -432,7 +431,7 @@ func Build(c verifier.Context, signer journal.Signer, s Retained, t TimeSample, 
 	if e != nil {
 		return nil, e
 	}
-	reissueBody := map[string]any{"type": "journal-entry/1", "registry": s.Registry, "owner": s.Owner, "seq": seq + 1, "prev": parsed["id"], "at": body["at"], "op": "add", "record_type": "revocation/1", "record": issued.ID}
+	reissueBody := map[string]any{"type": "journal-entry/1", "registry": s.Registry, "owner": s.Owner, "seq": seq + 1, "prev": parsed["id"], "at": clock.IssuedAt, "op": "add", "record_type": "revocation/1", "record": issued.ID}
 	raw, e := record.Canonical(reissueBody)
 	if e != nil {
 		return nil, fail(Malformed)

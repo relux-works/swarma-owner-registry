@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/relux-works/swarma-owner-registry/internal/journal"
+	"github.com/relux-works/swarma-owner-registry/internal/qtime"
 	"github.com/relux-works/waggle/record"
 )
 
@@ -41,11 +42,12 @@ func fixtureNegative(t *testing.T, suffix, want string) {
 	if suffix == "old-snapshot" {
 		// This positive also requires construction to use the new reference;
 		// substituting the old reference must not satisfy a head-change build.
-		built, e := Build(c, fixtureSigner(t), s, clock, Change{Anchor: p.Entries[0], RecordBody: wire(t, parseObject(t, p.Entries[1])["body"]), IssuedAt: "2026-01-01T00:01:05Z", CheckpointAt: "2026-01-01T00:01:20Z", Witness: p.Witness})
+		built, e := Build(c, fixtureSigner(t), s, clock, Change{Anchor: p.Entries[0], RecordBody: wire(t, parseObject(t, p.Entries[1])["body"]), IssuedAt: "2026-01-01T00:01:20Z", CheckpointAt: "2026-01-01T00:01:20Z", Witness: p.Witness})
 		if e != nil {
 			t.Fatalf("head-change construction positive: %v", e)
 		}
-		if object(parseObject(t, built.Publication.Candidate)["body"])["snapshot"] != parseObject(t, p.Snapshot.Bytes)["id"] {
+		expectedSnapshot, _, _ := projectedFixture(t, p, "2026-01-01T00:01:20Z")
+		if object(parseObject(t, built.Publication.Candidate)["body"])["snapshot"] != parseObject(t, expectedSnapshot)["id"] {
 			t.Fatal("head-change construction reused old reference")
 		}
 	}
@@ -55,21 +57,20 @@ func fixtureNegative(t *testing.T, suffix, want string) {
 // still required through journal admission, even with fresh qualified time.
 func TestHeadChangeStaleSnapshotRefused(t *testing.T) {
 	c, p, s, clock, _ := publicationFixture(t, "P-JRN-publish-reissue")
-	clock.Now = "2026-01-01T00:02:06Z"
-	clock.Watermark = clock.Now
+	clock = intervalAt(t, "2026-01-01T00:02:06Z")
 	b := parseObject(t, p.CheckpointBody)
-	b["at"] = clock.Now
+	b["at"] = "2026-01-01T00:02:06Z"
 	p.CheckpointBody = wire(t, b)
 	prepareRefused(t, c, p, s, clock, "journal_unavailable")
 }
 
-// Issuance also rejects an aged new candidate, without returning signed bytes.
+// An old caller timestamp cannot override a newer interval to issue an aged
+// candidate. Final preparation separately preserves the verifier age boundary.
 func TestStaleSnapshotRefused(t *testing.T) {
 	_, _, s, clock, _ := publicationFixture(t, "P-JRN-publish-reissue")
-	clock.Now = "2026-01-01T00:02:06Z"
-	clock.Watermark = clock.Now
+	clock = intervalAt(t, "2026-01-01T00:02:06Z")
 	got, e := Issue(fixtureSigner(t), s, clock, "2026-01-01T00:01:05Z", nil)
-	errorCode(t, e, Code("journal_unavailable"))
+	errorCode(t, e, TimeUnavailable)
 	if got != nil {
 		t.Fatal("aged candidate returned")
 	}
@@ -94,19 +95,19 @@ func TestEqualIssueTimeDifferentBytesRefused(t *testing.T) {
 // Both removal and postponing a previously retained (including future)
 // revocation refuse. Adding entries and moving an effective time earlier pass.
 func TestCumulativeRemovalRefused(t *testing.T) {
-	_, _, s, clock, _ := publicationFixture(t, "P-JRN-publish-reissue")
+	_, _, s, _, _ := publicationFixture(t, "P-JRN-publish-reissue")
 	retained := []Entry{{"record", record.Digest([]byte("revoked")), "2026-01-02T00:00:00Z"}}
 	s = withRetainedEntries(t, s, retained)
 	original := bytes.Clone(s.Snapshot)
 	for _, rows := range [][]Entry{nil, {{"record", retained[0].ID, "2026-01-03T00:00:00Z"}}} {
-		got, e := Issue(fixtureSigner(t), s, clock, "2026-01-01T00:01:05Z", rows)
+		got, e := Issue(fixtureSigner(t), s, intervalAt(t, "2026-01-01T00:01:05Z"), "2026-01-01T00:01:05Z", rows)
 		errorCode(t, e, CumulativeRemoval)
 		if got != nil || !bytes.Equal(s.Snapshot, original) {
 			t.Fatal("retained set changed")
 		}
 	}
 	retained[0].From = "2026-01-01T00:00:00Z"
-	if _, e := Issue(fixtureSigner(t), s, clock, "2026-01-01T00:01:05Z", retained); e != nil {
+	if _, e := Issue(fixtureSigner(t), s, intervalAt(t, "2026-01-01T00:01:05Z"), "2026-01-01T00:01:05Z", retained); e != nil {
 		t.Fatal(e)
 	}
 }
@@ -133,7 +134,7 @@ func TestPreparedCumulativeRemovalRefused(t *testing.T) {
 func TestGapRefused(t *testing.T) {
 	c, p, s, clock, _ := publicationFixture(t, "P-JRN-publish-reissue")
 	s.Available = false
-	got, e := Issue(fixtureSigner(t), s, clock, "2026-01-01T00:01:05Z", nil)
+	got, e := Issue(fixtureSigner(t), s, intervalAt(t, "2026-01-01T00:01:05Z"), "2026-01-01T00:01:05Z", nil)
 	errorCode(t, e, Gap)
 	if got != nil {
 		t.Fatal("missing history issued")
@@ -166,7 +167,7 @@ func TestSplitHeadSignalsAndRefuses(t *testing.T) {
 // Both independent capacity bounds refuse before custody, preserve the complete
 // last-good bytes and signal; no lower subset is returned or re-signed.
 func TestSnapshotCapacitySignalsWithoutDrop(t *testing.T) {
-	_, _, s, clock, _ := publicationFixture(t, "P-JRN-publish-reissue")
+	_, _, s, _, _ := publicationFixture(t, "P-JRN-publish-reissue")
 	for _, count := range []int{64, 65} {
 		t.Run(strings.Repeat("x", count-63), func(t *testing.T) {
 			rows := make([]Entry, count)
@@ -175,7 +176,7 @@ func TestSnapshotCapacitySignalsWithoutDrop(t *testing.T) {
 			}
 			original := bytes.Clone(s.Snapshot)
 			signer := &countSigner{Signer: fixtureSigner(t)}
-			got, e := Issue(signer, s, clock, "2026-01-01T00:01:05Z", rows)
+			got, e := Issue(signer, s, intervalAt(t, "2026-01-01T00:01:05Z"), "2026-01-01T00:01:05Z", rows)
 			errorCode(t, e, CapacityExhausted)
 			if count == 64 {
 				body := map[string]any{"type": "revocation/1", "issuer": s.Registry, "complete": true, "issued_at": "2026-01-01T00:01:05Z", "entries": entryValues(rows)}
@@ -199,7 +200,7 @@ func TestSnapshotCapacitySignalsWithoutDrop(t *testing.T) {
 	if prepared != nil || !e.(*Error).Signal || signer.calls != 0 {
 		t.Fatal("over-budget prepared snapshot reached custody")
 	}
-	if _, e := Issue(fixtureSigner(t), s, clock, "2026-01-01T00:01:05Z", []Entry{{"record", record.Digest([]byte("one")), "2026-01-01T00:00:00Z"}}); e != nil {
+	if _, e := Issue(fixtureSigner(t), s, intervalAt(t, "2026-01-01T00:01:05Z"), "2026-01-01T00:01:05Z", []Entry{{"record", record.Digest([]byte("one")), "2026-01-01T00:00:00Z"}}); e != nil {
 		t.Fatal(e)
 	}
 }
@@ -212,17 +213,17 @@ func TestTimeLossNoPublication(t *testing.T) {
 			c, p, s, clock, _ := publicationFixture(t, "P-JRN-publish-reissue")
 			switch which {
 			case "absent":
-				clock = TimeSample{}
+				clock = qtime.Interval{}
 			case "confidence":
-				clock.Confident = false
+				clock.Boot = ""
 			case "end":
-				clock.AuthorityUntil = clock.Now
+				clock.AuthorityUntil = clock.Upper
 			case "past-end":
-				clock.AuthorityUntil = "2026-01-01T00:01:19Z"
+				clock.AuthorityUntil = intervalAt(t, "2026-01-01T00:01:19Z").Upper
 			case "watermark":
-				clock.WatermarkAvailable = false
+				clock.JournalFloor = ""
 			case "backward":
-				clock.Watermark = "2026-01-01T00:01:21Z"
+				clock.PriorHighWater = intervalAt(t, "2026-01-01T00:01:21Z").Upper
 			}
 			signer := &countSigner{Signer: fixtureSigner(t)}
 			got, e := Issue(signer, s, clock, "2026-01-01T00:01:05Z", nil)
@@ -241,9 +242,10 @@ func TestTimeLossNoPublication(t *testing.T) {
 
 // The actual shared S4 three-entry fixture is reproduced exactly, including its
 // reissue bytes, signed checkpoint, prior ID lookup and pinned verifier plan.
+// New Build issuance uses its own interval timestamp and a later reissue entry.
 func TestHeadChangeReissueAccepted(t *testing.T) {
 	c, p, s, clock, expected := publicationFixture(t, "P-JRN-publish-reissue")
-	issued, e := Issue(fixtureSigner(t), s, clock, "2026-01-01T00:01:05Z", nil)
+	issued, e := Issue(fixtureSigner(t), s, intervalAt(t, "2026-01-01T00:01:05Z"), "2026-01-01T00:01:05Z", nil)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -260,26 +262,28 @@ func TestHeadChangeReissueAccepted(t *testing.T) {
 		t.Fatal("proof differs from original")
 	}
 	accepted(t, journal.Verify(got.Publication.Context, got.Publication.Entries, got.Publication.Candidate, nil))
-	built, e := Build(c, fixtureSigner(t), s, clock, Change{Anchor: p.Entries[0], RecordBody: wire(t, parseObject(t, p.Entries[1])["body"]), IssuedAt: "2026-01-01T00:01:05Z", CheckpointAt: "2026-01-01T00:01:20Z", Witness: p.Witness})
+	built, e := Build(c, fixtureSigner(t), s, clock, Change{Anchor: p.Entries[0], RecordBody: wire(t, parseObject(t, p.Entries[1])["body"]), IssuedAt: "2026-01-01T00:01:20Z", CheckpointAt: "2026-01-01T00:01:20Z", Witness: p.Witness})
 	if e != nil {
 		t.Fatal(e)
 	}
 	accepted(t, built.Result)
-	if !bytes.Equal(built.Publication.Candidate, expected) || !bytes.Equal(built.Publication.Snapshot, p.Snapshot.Bytes) {
-		t.Fatal("transaction builder differs from shared fixture")
+	expectedSnapshot, expectedEntry, expectedCheckpoint := projectedFixture(t, p, "2026-01-01T00:01:20Z")
+	if !bytes.Equal(built.Publication.Snapshot, expectedSnapshot) || !bytes.Equal(built.Publication.Candidate, expectedCheckpoint) || !bytes.Equal(built.Publication.Entries[2], expectedEntry) {
+		t.Fatal("projected construction differs from exact expected bytes")
 	}
-	for i := range p.Entries {
+	for i := 0; i < 2; i++ {
 		if !bytes.Equal(built.Publication.Entries[i], p.Entries[i]) {
-			t.Fatal("record/reissue entries differ from shared fixture")
+			t.Fatal("original record entries differ")
 		}
 	}
+
 }
 
 // Fresh complete construction preserves exact closed profile/ID and owns its
 // bytes; it does not claim durable publication or external time qualification.
 func TestFreshCompleteSnapshotAccepted(t *testing.T) {
-	_, _, s, clock, _ := publicationFixture(t, "P-JRN-publish-reissue")
-	got, e := Issue(fixtureSigner(t), s, clock, "2026-01-01T00:01:05Z", nil)
+	_, _, s, _, _ := publicationFixture(t, "P-JRN-publish-reissue")
+	got, e := Issue(fixtureSigner(t), s, intervalAt(t, "2026-01-01T00:01:05Z"), "2026-01-01T00:01:05Z", nil)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -298,10 +302,10 @@ func TestConsumerAgeBoundary(t *testing.T) {
 		t.Run((time.Duration(age) * time.Second).String(), func(t *testing.T) {
 			c, p, s, clock, _ := publicationFixture(t, "P-JRN-publish-reissue")
 			at, _ := time.Parse(time.RFC3339, "2026-01-01T00:01:05Z")
-			clock.Now = at.Add(time.Duration(age) * time.Second).Format(time.RFC3339)
-			clock.Watermark = clock.Now
+			now := at.Add(time.Duration(age) * time.Second).Format(time.RFC3339)
+			clock = intervalAt(t, now)
 			b := parseObject(t, p.CheckpointBody)
-			b["at"] = clock.Now
+			b["at"] = now
 			p.CheckpointBody = wire(t, b)
 			got, e := Prepare(c, fixtureSigner(t), s, clock, p)
 			if age == 60 {
@@ -345,17 +349,17 @@ func withRetainedEntries(t *testing.T, s Retained, rows []Entry) Retained {
 // Input and profile failures are typed, bounded and have no returned candidate;
 // the valid key/record set is a nearby positive rather than rejection of all.
 func TestInvalidSnapshotEntriesRefused(t *testing.T) {
-	_, _, s, clock, _ := publicationFixture(t, "P-JRN-publish-reissue")
+	_, _, s, _, _ := publicationFixture(t, "P-JRN-publish-reissue")
 	good := Entry{"record", record.Digest([]byte("one")), "2026-01-01T00:00:00Z"}
 	for _, rows := range [][]Entry{{{"other", good.ID, good.From}}, {{"key", "invalid", good.From}}, {{good.Kind, "sha256:invalid", good.From}}, {{good.Kind, good.ID, "2026-02-30T00:00:00Z"}}, {good, good}} {
-		got, e := Issue(fixtureSigner(t), s, clock, "2026-01-01T00:01:05Z", rows)
+		got, e := Issue(fixtureSigner(t), s, intervalAt(t, "2026-01-01T00:01:05Z"), "2026-01-01T00:01:05Z", rows)
 		errorCode(t, e, Malformed)
 		if got != nil {
 			t.Fatal("invalid issued")
 		}
 	}
 	rows := []Entry{good, {"key", s.Registry, "2026-01-02T00:00:00Z"}}
-	if _, e := Issue(fixtureSigner(t), s, clock, "2026-01-01T00:01:05Z", rows); e != nil {
+	if _, e := Issue(fixtureSigner(t), s, intervalAt(t, "2026-01-01T00:01:05Z"), "2026-01-01T00:01:05Z", rows); e != nil {
 		t.Fatal(e)
 	}
 }
@@ -363,12 +367,12 @@ func TestInvalidSnapshotEntriesRefused(t *testing.T) {
 // Reaching the advisory byte threshold still retains and signs all entries;
 // exceeding the hard bound is tested separately and never yields this candidate.
 func TestSnapshotCapacityWarningAccepted(t *testing.T) {
-	_, _, s, clock, _ := publicationFixture(t, "P-JRN-publish-reissue")
+	_, _, s, _, _ := publicationFixture(t, "P-JRN-publish-reissue")
 	rows := make([]Entry, 56)
 	for i := range rows {
 		rows[i] = Entry{"record", record.Digest([]byte{byte(i)}), "2026-01-01T00:00:00Z"}
 	}
-	got, e := Issue(fixtureSigner(t), s, clock, "2026-01-01T00:01:05Z", rows)
+	got, e := Issue(fixtureSigner(t), s, intervalAt(t, "2026-01-01T00:01:05Z"), "2026-01-01T00:01:05Z", rows)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -462,8 +466,7 @@ func TestJournalForkSignalPreserved(t *testing.T) {
 	p.PriorCheckpoint = cp
 	cb["at"] = "2026-01-01T00:01:21Z"
 	p.CheckpointBody = wire(t, cb)
-	clock.Now = text(cb["at"])
-	clock.Watermark = clock.Now
+	clock = intervalAt(t, text(cb["at"]))
 	got, e := Prepare(c, fixtureSigner(t), s, clock, p)
 	errorCode(t, e, Code("journal_fork"))
 	if got != nil || !e.(*Error).Signal {
@@ -477,7 +480,7 @@ func TestBuildMissingLinksRefused(t *testing.T) {
 	c, p, s, clock, _ := publicationFixture(t, "P-JRN-publish-reissue")
 	body := object(parseObject(t, p.Entries[1])["body"])
 	body["prev"] = record.Digest([]byte("wrong anchor"))
-	change := Change{Anchor: p.Entries[0], RecordBody: wire(t, body), IssuedAt: "2026-01-01T00:01:05Z", CheckpointAt: "2026-01-01T00:01:20Z", Witness: p.Witness}
+	change := Change{Anchor: p.Entries[0], RecordBody: wire(t, body), IssuedAt: "2026-01-01T00:01:20Z", CheckpointAt: "2026-01-01T00:01:20Z", Witness: p.Witness}
 	got, e := Build(c, fixtureSigner(t), s, clock, change)
 	errorCode(t, e, Code("journal_chain_broken"))
 	if got != nil {
@@ -489,9 +492,29 @@ func TestBuildMissingLinksRefused(t *testing.T) {
 	if got != nil {
 		t.Fatal("missing record returned candidate")
 	}
-	got, e = Build(c, fixtureSigner(t), s, TimeSample{}, change)
+	got, e = Build(c, fixtureSigner(t), s, qtime.Interval{}, change)
 	errorCode(t, e, TimeUnavailable)
 	if got != nil {
 		t.Fatal("missing time returned candidate")
 	}
+}
+
+// Independently encode the published fixture with the new lower issue second
+// and same-transaction reissue timestamp, without using the candidate builder.
+func projectedFixture(t *testing.T, p journal.Publication, at string) ([]byte, []byte, []byte) {
+	t.Helper()
+	body := object(parseObject(t, p.Snapshot.Bytes)["body"])
+	body["issued_at"] = at
+	snapshot := signFixture(t, body)
+	snapshotID := parseObject(t, snapshot)["id"]
+	entry := object(parseObject(t, p.Entries[2])["body"])
+	entry["record"], entry["at"] = snapshotID, at
+	id, e := record.ContentID("journal-entry/1", entry)
+	if e != nil {
+		t.Fatal(e)
+	}
+	rawEntry := wire(t, map[string]any{"version": "swarm-envelope/2", "body": entry, "id": id})
+	cp := parseObject(t, p.CheckpointBody)
+	cp["snapshot"], cp["head"] = snapshotID, id
+	return snapshot, rawEntry, signFixture(t, cp)
 }

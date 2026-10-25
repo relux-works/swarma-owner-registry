@@ -392,8 +392,8 @@ commit, custodian or exclusion transaction is implemented here.
 
 `internal/snapshot` constructs the registry owner's closed `revocation/1` base
 profile through `internal/journal.Signer`. `Issue` receives the protected current
-cumulative set, exact issue time, independently reconciled `Retained` base and
-checkpoint, and a fresh qualified `TimeSample`. It returns an owned private
+cumulative set, an assertion of the derived issue time, independently reconciled
+`Retained` base/checkpoint and time floors, and a fresh `qtime.Interval`. It returns an owned private
 `Issued` candidate. Every retained key/record entry, including future-effective
 entries, must remain; an effective time may move earlier but never later.
 Duplicate entries refuse. Issue time must strictly increase; equal-time changed
@@ -427,17 +427,26 @@ exposing no plan and changing no input or retained bytes. A candidate is not
 publication success; the later adapter must atomically commit the complete
 inventory and qualify witness intent/resolution, exclusion and recovery.
 
-`TimeSample` is an explicit integration boundary for the shared qualified time
-provider, not a second collector. `Confident` must come from the protected
-uncertainty/continuity policy, with exact UTC-second `Now`, independently durable
-`Watermark`, and exclusive `AuthorityUntil`. Missing confidence/history,
-backward time or reaching the authority endpoint refuses `time_unavailable`
-before custody. Issuance cannot exceed the conservative lower time bound.
-`Prepare` constructs the verifier's time facts from this sample, replacing any
-cached Context time. Each issuance and final decision requires a fresh sample;
-there is no clock read or local fallback. Real timeconf wiring, uncertainty
-calculation, cross-process holds and final transaction revalidation remain
-separate qualification work. Legacy journal consumption keeps the snapshot's
+`internal/qtime` is a pure integration boundary for caller-qualified time,
+not a collector or receipt authenticator. `Interval` retains canonical decimal
+nanoseconds for observed time, `[Lower,Upper]`, exclusive `AuthorityUntil`,
+provider `PriorHighWater`/`HighWater`, imported `JournalFloor`, boot and sample
+identity; an optional reference further bounds authority. Absent, inconsistent,
+overflowing or unrepresentable facts refuse. It checks `U < A`,
+`L > max(provider prior high water, journal floor)`, `high water = U`, and the
+shared uncertainty/authority ceilings before rounding. Converted bounds must
+also pass: lower bounds round down, upper bounds/floors up, exclusive ends down.
+
+`Interval.Project(priorWatermark, retainedDecisionFloor)` derives
+`issued_at=floor(L)`, `Now=ceil(U)` and
+`Watermark=max(priorWatermark,floor(L))`. The registry's own prior watermark is
+never a provider floor; a prior watermark beyond `ceil(U)` refuses. Snapshot
+`Issued.Time` and `Candidate.Time` expose the projection, upper decision floor
+and boot for the later adapter's atomic durable acknowledgement. `Prepare`
+replaces cached Context time. Missing time continuity refuses `time_unavailable`
+before custody. Real timeconf wiring, receipt/operation authentication,
+cross-process holds and final transaction revalidation remain qualification work.
+Legacy journal consumption keeps the snapshot's
 own age at most 60 seconds inclusive; no freshness receipt bypass is introduced.
 
 Both **64 entries** and **8192 whole signed bytes** are hard limits, preflighted
@@ -460,24 +469,27 @@ gossip discovery or absence of hidden publications.
 
 `internal/freshness` derives the closed registry-owner `freshness/1` body from
 protected scope, a retained eight-field `Anchor`, a resolved checkpoint and
-an explicit issue time. It uses the existing closed-profile `journal.Signer`
+a caller-qualified interval. It uses the existing closed-profile `journal.Signer`
 and self-checks with the pinned `VerifyFreshness`. The global publication
 sequence advances by one across head changes. Same-head publications name the
 last freshness ID; the first publication after an advance has null `prev`.
 Issue times strictly advance, including beyond an actual epoch predecessor.
 Quiet publications preserve exact base/checkpoint bytes and the journal head.
 
-`Input` supplies protected verifier policy/time, a time-provider watermark,
+`Input` supplies protected verifier policy and `Time qtime.Interval`,
 exact snapshot/checkpoint, query IDs/keys and `WitnessRead`. The latter carries
 an already authenticated fact, its original evidence bytes and exact protected
 read timestamp. The future witness client must bind these inputs to the current
 resolved head, exclude pending intent and share publication serialization.
-The watermark is clamped to retained state before verification. Refusals retain
+The same conservative projection replaces Context time and clamps the lower
+watermark to retained state before verification. Refusals retain
 the pinned code and an empty plan, with no publication or persistence call.
 
 `State` retains explicit genesis, the current exact eight-field anchor, every
 accepted publication across all heads, original witness/read evidence, exact
-snapshot/checkpoint bytes, accepted code/plan and watermark. The archive grows
+snapshot/checkpoint bytes, accepted code/plan, original interval/projection, registry watermark, retained
+decision upper floor and boot. The verifier plan remains unchanged and can carry
+a higher watermark than the separately retained lower projection. The archive grows
 past the verifier's 64-publication proof window. `New` requires externally
 qualified `Recovery`: complete-history/floor and real-head reconciliation, time
 continuity, old-instance exclusion and an exact independent `StateID`. Genesis
@@ -490,9 +502,11 @@ retain the complete next inventory and exact outcome, with checked durability
 before acknowledging its exact digest. `Publish` returns bytes and `Outcome`
 only after that acknowledgement. Unknown or mismatched durability fences later
 calls. `LastResolved` copies recovery evidence; after uncertainty it cannot
-establish what reached storage. Exact retransmission is currentness-checked,
-then returns the original bytes/code/plan without signing, another position or
-renewal. `Outcome` carries no S5 consumer receipt; receipt composition remains
+establish what reached storage. An identical retransmission rechecks its original
+interval and returns its original bytes/code/plan without a new decision or
+renewal. `Retry(Input)` rechecks the last publication with fresh interval evidence;
+it preserves the original position/outcome and atomically retains the new time
+floors before success. A stale retry refuses without advancing state. `Outcome` carries no S5 consumer receipt; receipt composition remains
 separate work. No production persistence implementation is supplied.
 
 Tests use public fixed-seed vectors and the real closed-profile signing gate,
@@ -524,10 +538,10 @@ heavy-slot --label registry -- go build ./internal/store
 heavy-slot --label registry -- go test ./internal/store -timeout=2h
 heavy-slot --label registry -- go vet ./internal/store
 heavy-slot --label registry -- gofmt -w internal/store/*.go
-heavy-slot --label registry -- go build ./internal/snapshot ./internal/journal
-heavy-slot --label registry -- go test ./internal/snapshot ./internal/journal
-heavy-slot --label registry -- go vet ./internal/snapshot ./internal/journal
-heavy-slot --label registry -- gofmt -w internal/snapshot/*.go internal/journal/*.go
+heavy-slot --label registry -- go build ./internal/qtime ./internal/snapshot ./internal/journal
+heavy-slot --label registry -- go test ./internal/qtime ./internal/snapshot ./internal/journal
+heavy-slot --label registry -- go vet ./internal/qtime ./internal/snapshot ./internal/journal
+heavy-slot --label registry -- gofmt -w internal/qtime/*.go internal/snapshot/*.go internal/journal/*.go
 ```
 
 `go build` checks the selected library packages; the core `go test` command covers policy parsing,

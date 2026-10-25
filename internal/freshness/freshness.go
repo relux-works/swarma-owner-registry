@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/relux-works/swarma-owner-registry/internal/journal"
+	"github.com/relux-works/swarma-owner-registry/internal/qtime"
 	"github.com/relux-works/waggle/record"
 	"github.com/relux-works/waggle/verifier"
 )
@@ -71,13 +72,15 @@ func (r Outcome) clone() Outcome {
 // Publication archives exact accepted bytes and their original evidence/outcome.
 // Archive membership records admission, never present or historical authority.
 type Publication struct {
-	Bytes      []byte  `json:"bytes"`
-	Checkpoint []byte  `json:"checkpoint"`
-	Snapshot   []byte  `json:"snapshot"`
-	Witness    []byte  `json:"witness"`
-	ReadAt     string  `json:"read_at"`
-	Anchor     Anchor  `json:"anchor"`
-	Outcome    Outcome `json:"outcome"`
+	Bytes      []byte           `json:"bytes"`
+	Checkpoint []byte           `json:"checkpoint"`
+	Snapshot   []byte           `json:"snapshot"`
+	Witness    []byte           `json:"witness"`
+	ReadAt     string           `json:"read_at"`
+	Anchor     Anchor           `json:"anchor"`
+	Outcome    Outcome          `json:"outcome"`
+	Time       qtime.Interval   `json:"time"`
+	Projection qtime.Projection `json:"projection"`
 }
 
 func (p Publication) clone() Publication {
@@ -93,10 +96,12 @@ func (p Publication) clone() Publication {
 // State retains all publications, including prior heads, without truncation.
 // Its authenticated genesis and watermark are independent of a local counter.
 type State struct {
-	Genesis   Anchor        `json:"genesis"`
-	Anchor    Anchor        `json:"anchor"`
-	History   []Publication `json:"history"`
-	Watermark string        `json:"watermark"`
+	Genesis       Anchor        `json:"genesis"`
+	Anchor        Anchor        `json:"anchor"`
+	History       []Publication `json:"history"`
+	Watermark     string        `json:"watermark"`
+	DecisionFloor string        `json:"decision_floor"`
+	Boot          string        `json:"boot"`
 }
 
 func (s State) Clone() State {
@@ -164,17 +169,16 @@ type WitnessRead struct {
 	Original []byte
 }
 
-// Input supplies protected policy/time and current resolved evidence. Context's
-// anchor, watermark, witness, read and registry snapshot are replaced from the
-// typed fields and retained State. Watermark is a protected time-provider value;
-// it is clamped to the retained floor, never inferred from IssuedAt.
+// Input supplies one caller-qualified interval and current resolved evidence.
+// Context's point time and watermark are replaced by the interval projection
+// and independently retained state, never by the provider's consumed floor.
 type Input struct {
-	Context             verifier.Context
-	IssuedAt, Watermark string
-	Checkpoint          []byte
-	Snapshot            journal.SnapshotFacts
-	Witness             WitnessRead
-	IDs, Keys           []string
+	Context    verifier.Context
+	Time       qtime.Interval
+	Checkpoint []byte
+	Snapshot   journal.SnapshotFacts
+	Witness    WitnessRead
+	IDs, Keys  []string
 }
 
 // Publisher serializes local calls. External serialization/exclusion remains a
@@ -223,20 +227,24 @@ func validAnchor(a Anchor) bool {
 // the externally qualified Recovery contract is mandatory even for intact bytes.
 func New(t Trust) (*Publisher, error) {
 	s := t.Retained
-	if absent(t.Signer) || absent(t.Persistence) || record.ValidateKey(t.Registry) != nil || t.Owner == "" || !t.Recovery.Reconciled || !validAnchor(s.Genesis) || !validAnchor(s.Anchor) || s.Genesis.PublicationSeq != 0 || s.Anchor.RegistryID != t.Registry || s.Genesis.RegistryID != t.Registry || s.Anchor.Owner != t.Owner || s.Genesis.Owner != t.Owner || !timestamp(s.Watermark) || int64(len(s.History)) != s.Anchor.PublicationSeq {
+	if absent(t.Signer) || absent(t.Persistence) || record.ValidateKey(t.Registry) != nil || t.Owner == "" || !t.Recovery.Reconciled || !validAnchor(s.Genesis) || !validAnchor(s.Anchor) || s.Genesis.PublicationSeq != 0 || s.Anchor.RegistryID != t.Registry || s.Genesis.RegistryID != t.Registry || s.Anchor.Owner != t.Owner || s.Genesis.Owner != t.Owner || !timestamp(s.Watermark) || !qtime.ValidFloor(s.DecisionFloor) || s.Boot == "" || int64(len(s.History)) != s.Anchor.PublicationSeq {
 		return nil, unavailable()
 	}
 	if s.Anchor.PublicationSeq == 0 && (!t.Recovery.GenesisAuthorized || !reflect.DeepEqual(s.Genesis, s.Anchor)) {
 		return nil, unavailable()
 	}
 	for i, p := range s.History {
+		clock, e := p.Time.Project(p.Projection.Watermark, p.Time.JournalFloor)
+		if e != nil || clock != p.Projection || p.Outcome.Plan.Watermark != clock.Now || s.Watermark < clock.Watermark || !qtime.FloorAtLeast(s.DecisionFloor, clock.DecisionFloor) {
+			return nil, unavailable()
+		}
 		if p.Anchor.PublicationSeq != int64(i)+1 || !validAnchor(p.Anchor) || p.Anchor.RegistryID != t.Registry || p.Anchor.Owner != t.Owner || len(p.Bytes) == 0 || len(p.Bytes) > journal.MaxRecordBytes || len(p.Checkpoint) == 0 || len(p.Checkpoint) > journal.MaxRecordBytes || len(p.Snapshot) == 0 || len(p.Snapshot) > journal.MaxRecordBytes || len(p.Witness) == 0 || !timestamp(p.ReadAt) || p.Outcome.Code != "accept" || p.Outcome.Plan.Reanchor != nil {
 			return nil, unavailable()
 		}
 	}
 	if len(s.History) > 0 {
 		last := s.History[len(s.History)-1]
-		if !reflect.DeepEqual(last.Anchor, s.Anchor) || last.Outcome.Plan.Watermark != s.Watermark {
+		if !reflect.DeepEqual(last.Anchor, s.Anchor) {
 			return nil, unavailable()
 		}
 	}
@@ -291,7 +299,16 @@ func parse(raw []byte) (map[string]any, error) {
 // and self-checks against the exact retained anchor. Accepted bytes/code/plan are
 // exposed only after exact persistence acknowledgement. Exact retransmission is
 // rechecked for currentness but returns its original outcome without renewal.
-func (p *Publisher) Publish(in Input) ([]byte, Outcome) {
+func (p *Publisher) Publish(in Input) ([]byte, Outcome) { return p.publish(in, false) }
+
+// Retry rechecks the last exact publication under a new interval without issuing
+// another publication. Success preserves its original outcome and durably retains
+// the new decision floor; refusal never renews or exposes that outcome.
+func (p *Publisher) Retry(in Input) ([]byte, Outcome) { return p.publish(in, true) }
+
+func advances(at string, previous *string) bool { return previous == nil || at > *previous }
+
+func (p *Publisher) publish(in Input, retryOnly bool) ([]byte, Outcome) {
 	if p == nil {
 		return no("freshness_state_unavailable")
 	}
@@ -306,8 +323,27 @@ func (p *Publisher) Publish(in Input) ([]byte, Outcome) {
 	if len(in.Witness.Original) == 0 {
 		return no("freshness_unavailable")
 	}
-	if !timestamp(in.Watermark) {
-		return no("watermark_unavailable")
+	retry := false
+	identical := false
+	floor := p.state.DecisionFloor
+	if len(p.state.History) > 0 {
+		last := p.state.History[len(p.state.History)-1]
+		identical = in.Time == last.Time && bytes.Equal(in.Checkpoint, last.Checkpoint) && bytes.Equal(in.Snapshot.Bytes, last.Snapshot)
+		retry = retryOnly || identical
+		// Exact retransmission revalidates the original interval against its original
+		// decision floor. It creates no new time decision or renewed outcome.
+		if identical {
+			floor = in.Time.JournalFloor
+		}
+	} else if retryOnly {
+		return no("freshness_unavailable")
+	}
+	clock, e := in.Time.Project(p.state.Watermark, floor)
+	if e != nil {
+		return no("time_unavailable")
+	}
+	if !retry && !advances(clock.IssuedAt, p.state.Anchor.IssuedAt) {
+		return no("freshness_time_invalid")
 	}
 	checkpoint, e := parse(in.Checkpoint)
 	if e != nil {
@@ -316,11 +352,9 @@ func (p *Publisher) Publish(in Input) ([]byte, Outcome) {
 	cb := obj(checkpoint["body"])
 	c := in.Context
 	c.FreshnessAnchor = p.state.Anchor.fact()
-	watermark := in.Watermark
-	if watermark < p.state.Watermark {
-		watermark = p.state.Watermark
-	}
-	c.Watermark, _ = verifier.Present(watermark)
+	c.Now, _ = verifier.Present(clock.Now)
+	c.Time, _ = verifier.Present(map[string]any{"trusted": true, "fresh": true, "authority_until": clock.AuthorityUntil})
+	c.Watermark, _ = verifier.Present(clock.Watermark)
 	c.WatermarkAvailable, _ = verifier.Present(true)
 	c.JournalWitness = in.Witness.Fact
 	c.WitnessReadAt, _ = verifier.Present(in.Witness.ReadAt)
@@ -333,13 +367,8 @@ func (p *Publisher) Publish(in Input) ([]byte, Outcome) {
 		return no("freshness_malformed")
 	}
 	var raw, encoded []byte
-	retry := false
-	if len(p.state.History) > 0 {
-		last := p.state.History[len(p.state.History)-1]
-		if p.state.Anchor.IssuedAt != nil && in.IssuedAt == *p.state.Anchor.IssuedAt && bytes.Equal(in.Checkpoint, last.Checkpoint) && bytes.Equal(in.Snapshot.Bytes, last.Snapshot) {
-			raw = bytes.Clone(last.Bytes)
-			retry = true
-		}
+	if retry {
+		raw = bytes.Clone(p.state.History[len(p.state.History)-1].Bytes)
 	}
 	if !retry {
 		if p.state.Anchor.PublicationSeq == journal.MaxSequence {
@@ -350,7 +379,7 @@ func (p *Publisher) Publish(in Input) ([]byte, Outcome) {
 		if number(cb["seq"]) == p.state.Anchor.RegistrySeq && p.state.Anchor.FreshnessID != nil {
 			prev = *p.state.Anchor.FreshnessID
 		}
-		body := map[string]any{"type": "freshness/1", "registry": p.registry, "owner": p.owner, "publication_seq": seq, "prev": prev, "issued_at": in.IssuedAt, "snapshot": cb["snapshot"], "registry_seq": cb["seq"], "checkpoint_id": checkpoint["id"]}
+		body := map[string]any{"type": "freshness/1", "registry": p.registry, "owner": p.owner, "publication_seq": seq, "prev": prev, "issued_at": clock.IssuedAt, "snapshot": cb["snapshot"], "registry_seq": cb["seq"], "checkpoint_id": checkpoint["id"]}
 		encoded, e = record.Canonical(body)
 		if e != nil {
 			return no("freshness_malformed")
@@ -373,6 +402,13 @@ func (p *Publisher) Publish(in Input) ([]byte, Outcome) {
 		return nil, Outcome{Code: r.Code, Plan: r.Plan}
 	}
 	if retry {
+		if !identical {
+			next := p.state.Clone()
+			next.Watermark, next.DecisionFloor, next.Boot = clock.Watermark, clock.DecisionFloor, clock.Boot
+			if !p.commit(next) {
+				return no("freshness_persistence_unavailable")
+			}
+		}
 		return bytes.Clone(raw), p.state.History[len(p.state.History)-1].Outcome.clone()
 	}
 	env, e := parse(raw)
@@ -391,18 +427,26 @@ func (p *Publisher) Publish(in Input) ([]byte, Outcome) {
 	outcome := Outcome{Code: r.Code, Plan: r.Plan}.clone()
 	next := p.state.Clone()
 	next.Anchor = a
-	next.Watermark = r.Plan.Watermark
-	next.History = append(next.History, Publication{bytes.Clone(raw), bytes.Clone(in.Checkpoint), bytes.Clone(in.Snapshot.Bytes), bytes.Clone(in.Witness.Original), in.Witness.ReadAt, a.clone(), outcome.clone()})
+	next.Watermark, next.DecisionFloor, next.Boot = clock.Watermark, clock.DecisionFloor, clock.Boot
+	next.History = append(next.History, Publication{bytes.Clone(raw), bytes.Clone(in.Checkpoint), bytes.Clone(in.Snapshot.Bytes), bytes.Clone(in.Witness.Original), in.Witness.ReadAt, a.clone(), outcome.clone(), in.Time, clock})
+	if !p.commit(next) {
+		return no("freshness_persistence_unavailable")
+	}
+
+	return bytes.Clone(raw), outcome
+}
+
+func (p *Publisher) commit(next State) bool {
 	nextID, e := StateID(next)
 	if e != nil {
 		p.fenced = true
-		return no("freshness_state_unavailable")
+		return false
 	}
 	ack, e := p.store.Commit(Update{p.stateID, next.Clone()})
 	if e != nil || ack != nextID {
 		p.fenced = true
-		return no("freshness_persistence_unavailable")
+		return false
 	}
 	p.state, p.stateID = next, nextID
-	return bytes.Clone(raw), outcome
+	return true
 }

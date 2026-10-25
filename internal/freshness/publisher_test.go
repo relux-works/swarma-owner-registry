@@ -142,8 +142,7 @@ func TestFreshnessAtomicRetry(t *testing.T) {
 	}
 	unchanged(t, before, p.LastResolved())
 	stale := at(t, in, "2026-01-01T00:05:00Z")
-	stale.IssuedAt = in.IssuedAt
-	denied, refusal := p.Publish(stale)
+	denied, refusal := p.Retry(stale)
 	noCandidate(t, denied, refusal, "freshness_unavailable")
 	unchanged(t, before, p.LastResolved())
 	if store.calls != 1 || s.calls != 1 {
@@ -176,7 +175,7 @@ func TestOldS3RejectsAgedBase(t *testing.T) {
 	}
 	in := input(t)
 	body := object(parsed(t, in.Snapshot.Bytes)["body"])
-	body["issued_at"] = in.IssuedAt
+	body["issued_at"] = issueAt(t, in)
 	fresh, e := signer(t).Sign(wire(t, body))
 	if e != nil {
 		t.Fatal(e)
@@ -207,16 +206,17 @@ func TestPublisherRefusalHasNoEffects(t *testing.T) {
 	publish(t, p, in)
 	before := p.LastResolved()
 	bad := advanced(t, in)
-	bad.IssuedAt = in.IssuedAt
+	bad.Time = in.Time
+	bad.Time.SampleID = "sample-other"
 	snap := object(parsed(t, bad.Snapshot.Bytes)["body"])
-	snap["issued_at"] = in.IssuedAt
+	snap["issued_at"] = issueAt(t, in)
 	var e error
 	bad.Snapshot.Bytes, e = signer(t).Sign(wire(t, snap))
 	if e != nil {
 		t.Fatal(e)
 	}
 	cp := object(parsed(t, bad.Checkpoint)["body"])
-	cp["at"] = in.IssuedAt
+	cp["at"] = issueAt(t, in)
 	cp["snapshot"] = parsed(t, bad.Snapshot.Bytes)["id"]
 	bad.Checkpoint, e = signer(t).Sign(wire(t, cp))
 	if e != nil {
@@ -227,7 +227,7 @@ func TestPublisherRefusalHasNoEffects(t *testing.T) {
 	bad.Witness.Fact = fact(t, witness)
 	bad.Witness.Original = wire(t, witness)
 	b, r := p.Publish(bad)
-	noCandidate(t, b, r, "freshness_time_invalid")
+	noCandidate(t, b, r, "time_unavailable")
 	unchanged(t, before, p.LastResolved())
 	if store.calls != 1 {
 		t.Fatal("refusal persisted")
@@ -241,12 +241,12 @@ func TestFreshnessEpochGenesis(t *testing.T) {
 	c, _, cp, d := proof(t, "P-FR-genesis-epoch")
 	v := object(d["fixture"])
 	a := anchor(t, object(v["freshness_anchor"]))
-	state := f.State{Genesis: a, Anchor: a, Watermark: text(v["watermark"])}
+	state := f.State{Genesis: a, Anchor: a, Watermark: text(v["watermark"]), DecisionFloor: "-1000000000", Boot: "boot-a"}
 	before := state.Clone()
 	p := publisher(t, state, &persistence{})
 	root := a.RegistryID
 	row := object(object(v["revocations"])[root])
-	in := f.Input{Context: c, IssuedAt: text(v["now"]), Watermark: text(v["watermark"]), Checkpoint: cp, Snapshot: input(t).Snapshot, Witness: f.WitnessRead{Fact: c.JournalWitness, ReadAt: text(v["witness_read_at"]), Original: wire(t, v["journal_witness"])}}
+	in := f.Input{Context: c, Time: intervalAt(t, text(v["now"])), Checkpoint: cp, Snapshot: input(t).Snapshot, Witness: f.WitnessRead{Fact: c.JournalWitness, ReadAt: text(v["witness_read_at"]), Original: wire(t, v["journal_witness"])}}
 	in.Snapshot.Bytes = decode(t, row["snapshot"])
 	first, _ := publish(t, p, in)
 	if object(parsed(t, first)["body"])["issued_at"] != "1970-01-01T00:00:00Z" {
@@ -284,7 +284,7 @@ func TestFreshnessStateCopies(t *testing.T) {
 func TestFreshnessCompleteHistoryRetained(t *testing.T) {
 	p := publisher(t, initial(t), &persistence{})
 	in := input(t)
-	start, _ := time.Parse(time.RFC3339, in.IssuedAt)
+	start, _ := time.Parse(time.RFC3339, issueAt(t, in))
 	for i := 0; i < 65; i++ {
 		publish(t, p, at(t, in, start.Add(time.Duration(i)*20*time.Second).Format(time.RFC3339)))
 	}
