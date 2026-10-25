@@ -32,6 +32,8 @@ Immutable inputs read for this design:
 | R | [Registrar](https://github.com/relux-works/swarma-registrar/blob/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/spec/registrar.md), §§4.2–4.5 and Appendix C.3. |
 | P | Public [ccj](https://github.com/relux-works/swarma-registrar/tree/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/ccj), [enrollment](https://github.com/relux-works/swarma-registrar/tree/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/enrollment) and [registry](https://github.com/relux-works/swarma-registrar/tree/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/registry) packages. |
 | WS | [Witness server proposal](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md), PR #20: exact server/wrapper, challenged reads, strict custodian and limits; spec only, not deployed or qualified. |
+| WC | Witness libraries at `c18d70040d11a6a03078df1e61c1bf3aa0dae85a`: [policy/binding.go](https://github.com/relux-works/swarma-witness/blob/c18d70040d11a6a03078df1e61c1bf3aa0dae85a/policy/binding.go), [spec/policy-v1.md](https://github.com/relux-works/swarma-witness/blob/c18d70040d11a6a03078df1e61c1bf3aa0dae85a/spec/policy-v1.md), [spec/wire-v1.md](https://github.com/relux-works/swarma-witness/blob/c18d70040d11a6a03078df1e61c1bf3aa0dae85a/spec/wire-v1.md) and [UNRESOLVED_QUESTIONS.md](https://github.com/relux-works/swarma-witness/blob/c18d70040d11a6a03078df1e61c1bf3aa0dae85a/UNRESOLVED_QUESTIONS.md). Pure contracts; serving remains closed (`spec/policy-v1.md:19–31`). |
+| OR | Registry baseline for bridge citations: [design/owner-registry.md](https://github.com/relux-works/swarma-owner-registry/blob/018c21624b0c8a2adbbf823c4e2059bc3cb264a2/design/owner-registry.md) at `018c21624b0c8a2adbbf823c4e2059bc3cb264a2`. |
 | V | S4 public [record](https://github.com/relux-works/waggle/tree/f76a400ebeb599b95a9bf9b2c59b522bef0392d8/record), [verifier](https://github.com/relux-works/waggle/tree/f76a400ebeb599b95a9bf9b2c59b522bef0392d8/verifier) and [fixtures](https://github.com/relux-works/waggle/tree/f76a400ebeb599b95a9bf9b2c59b522bef0392d8/vectors/swarm-envelope-2): pure admission, not I/O or activation. |
 | S5 | [Receipt contract](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/spec/swarm-envelope-2.md), §§2.10, 6–7; [D41 closed / D42 open](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/UNRESOLVED_QUESTIONS.md); [verifier API classification](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/verifier/README.md), [receipt](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/verifier/receipt.go) and [service validation](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/verifier/service.go). Merged on 2026-10-25; design source, not the current module pin. |
 
@@ -50,6 +52,12 @@ new verifier implementation, root recovery, contact records, registry exchange
 or a registrar snapshot API. Broker PR #13 is merged in B, whose §6.5 retains
 v0 local authority until separately reviewed migration. The registrar continues
 to consume only R's pinned signed commit.
+
+Bridge source citations below use `OR`, `WS` and `WC` with file:line ranges
+at those exact revisions. They distinguish proposed consumer requirements from
+implemented witness-local checks; they do not qualify an adapter or reopen
+serving (OR:design/owner-registry.md:749–764,964–978;
+WC:spec/policy-v1.md:3–6,27–31).
 
 ## 2. Trust boundary and key roles
 
@@ -75,6 +83,18 @@ collections must not overlap roles; unsigned key_class never selects a profile.
 | Witness consumer/bridge principal | Only its reviewed stream authentication/record profile, never content | Separate protected witness-side account; no credential available to registry writer | Owner rebinds credentials without stream reset; exact-candidate recovery gates persist | That consumer stream's claims, not other consumers' streams or content roots |
 | Off-node checkpoint custodian | WS independently authenticated checkpoint confirmations/fresh reads; exact provider profile gated | Separate off-node administration, never registry/witness account access | Explicit owner-approved continuity-preserving policy; no reset from host backup | False latestness/rollback claims within its retained coverage; combined loss with all surviving evidence is outside the guarantee |
 | Transport principals | TLS authentication only | Dedicated publisher/client or server process; private client keys never stored as records | Protected ACL/certificate update with explicit revocation and no root discovery | Allowed channel use, not content or witness authority |
+
+The registry bridge must use the **Bridge** role, never Observer, for its bound
+checkpoint stream. Provision its exact principal and transport pin both for
+append and explicitly in that stream's readers; append membership grants no
+read membership. An Observer's explicit read permission does not make it a
+registry bridge. S2 checks only witness-local principal/pin/role membership:
+separately qualify writer credential exclusion, the bridge's lack of content
+authority, and custodian account/administrative isolation before activation.
+G07/G10 remain closed; this design grants no serving or disclosure approval
+(OR:design/owner-registry.md:74–76,782–788;
+WC:policy/binding.go:25–51,100–121; WC:spec/policy-v1.md:19–31;
+WS:spec/witness-service.md:100–117).
 
 Maintainer and registry-owner keys differ from each other and from every content
 root, including E1. External issuer custody is not decided here: if an issuer
@@ -386,6 +406,12 @@ a real publication id/time and exact snapshot/checkpoint references.
 `WitnessReadAt` is the protected timestamp of the exact authenticated
 registry/head/checkpoint read, retained with its original evidence. It is not
 checkpoint_time, a received self-assertion or a new JournalWitness member.
+The consumer-local completion measurement, original uncertainty and retained
+read evidence must satisfy §6.2 before §9's conservative projection. WC1's
+archive does not protect registry FreshnessAnchor/history or C/V/F use state;
+their independent protection remains Q18 (§6.2), not an archive inference
+(OR:design/owner-registry.md:386–420,924–946,1188–1209;
+WS:spec/witness-service.md:475–504; WC:UNRESOLVED_QUESTIONS.md:21–25).
 Retain the effective-time watermark as authoritative state too. Publication
 bytes, anchor, exact snapshot/checkpoint, authenticated read evidence, watermark
 and outcome become durable atomically before visibility/use; a normal F success
@@ -755,13 +781,38 @@ All retries/pages/handshakes/custodian reads share the remaining five-second
 maximum (or stricter consumer budget); timeout/unavailable custodian closes
 authority, including on unchanged-head fresh reads. B avoids heartbeat appends,
 not that dependency. Registrar WC2 transport acceptance remains pending its
-own decision; this registry adapter does not depend on its outcome.
+own decision; this registry adapter does not depend on its outcome
+(OR:design/owner-registry.md:749–758;
+WS:spec/witness-service.md:218–243,318–337,483–504;
+WC:UNRESOLVED_QUESTIONS.md:25,28,38).
 
-WC1 S3 v2 supplies no read-completion time fact: `WitnessReadAt` must come from
-our protected adapter's qualified read-completion measurement of the exact
-authenticated complete read, never TLS time, checkpoint_time, server audit times,
-a retry receipt or an unrelated clock sample; this remains an open slice 5b
-requirement.
+**Open consumer-local read contract (slice 5b).** `WitnessReadAt` must come from
+the protected adapter's qualified read-completion measurement of the **exact
+authenticated complete read**. Retain the original measurement, uncertainty,
+clock/boot and qualification identity and conversion provenance; apply §9's
+conservative projection and §5's original and converted age predicates. Neither
+WC1's closed head/receipt fields nor TLS time, checkpoint_time, server audit
+times, an old retry receipt or an unrelated clock sample supply this fact.
+Missing or unqualified completion evidence refuses `freshness_unavailable`
+without advancing freshness authority; there is no substitute time source
+(OR:design/owner-registry.md:386–394,438–444,760–764,924–946;
+WS:spec/witness-service.md:267–282,598–604;
+WC:spec/wire-v1.md:88–100; WC:UNRESOLVED_QUESTIONS.md:24,30).
+
+The adapter must own and retain the request/challenge, service/stream and trusted
+record/control anchors; exact authenticated signed head and original receipt;
+all required record, control and immediate-intent proof pages; the eight-field
+projection and original checkpoint/candidate inventory; exact C completion/use
+binding; and the associated completion measurement/uncertainty above. Verify
+scope, challenge, signatures, complete chains, pairing and exact head before
+producing a bounded owned verified-read result. Equal anchors still require
+explicit current intent evidence. Missing pages, conflicting anchors, absent
+commit binding or exceeded proof limits fence authority: no truncated prefix,
+hash-only currentness or automatic offline fallback. A fresh read is not a lease;
+V must recheck the exact C/head under its final serialization
+(OR:design/owner-registry.md:766–788,1078–1080,1188–1198;
+WS:spec/witness-service.md:218–243,284–309;
+WC:spec/wire-v1.md:88–100,113–117; WC:UNRESOLVED_QUESTIONS.md:30,33–34).
 
 WS's eight-member projection is exactly `{registry_id,owner,registry_seq,
 registry_head,checkpoint_id,checkpoint_time,candidate_digest,previous_checkpoint_id}`.
@@ -777,21 +828,69 @@ one real registry entry takes intent plus committed positions. Retain previous
 checkpoint time independently of the six-field fact, with candidate inventory
 and witness/control anchors; null predecessor needs external genesis authority.
 Same registry seq and head with a different checkpoint id is a fork too; fence,
-retain both verified originals and signal. A lower candidate is rollback.
+retain both verified originals and signal. A lower candidate is rollback
+(OR:design/owner-registry.md:766–780;
+WS:spec/witness-service.md:334–367,380–411;
+WC:spec/wire-v1.md:113–117; WC:UNRESOLVED_QUESTIONS.md:32–34).
 
 The registry writer has **no witness append credential or append permission**.
 The separate witness-side bridge validates complete recoverable candidate
 inventory, not a writer digest, and appends only its provisioned registry stream.
-It cannot write other consumer streams. Exact wrapper+predecessor retries return
-original receipts. Reserve room for both positions; no second intent while one
-is unresolved. The bridge independently verifies exact durable local commit
-before matching resolution; the witness alone cannot prove durability/exclusion.
+It cannot write other consumer streams. Reserve room for both positions;
+no second intent while one is unresolved. The bridge independently verifies
+exact durable local commit before matching resolution; the witness alone
+cannot prove durability/exclusion
+(OR:design/owner-registry.md:782–788;
+WS:spec/witness-service.md:334–349,369–389;
+WC:policy/binding.go:100–107; WC:UNRESOLVED_QUESTIONS.md:33).
 
-For each real accepted entry: quiesce publication and exclude old instances;
-validate exact candidate and proof budget; acknowledge external intent before
-any authoritative local commit; sync exact state/inventory/outcome/watermark;
-acknowledge matching committed resolution; revalidate bytes/time/authority;
-atomically publish the resolved head, then bound freshness and acknowledge.
+Append retry means resending the byte-for-byte identical **complete wrapper**
+against its original predecessor: return the original receipt, without another
+position, replacement receipt or re-signing. Changed occupied bytes refuse
+`position_conflict`; a wrong predecessor refuses `head_conflict` (checkpoint
+fork detection retains its prior precedence). Current authorization, complete
+durability barriers and the separately durable retry-lookup audit still apply;
+failure cannot be bypassed to release a receipt. That old exact-retry receipt is
+historical outcome evidence, **never a fresh resolution read**
+(OR:design/owner-registry.md:782–788,819–822;
+WS:spec/witness-service.md:181–214,610–616;
+WC:UNRESOLVED_QUESTIONS.md:21–23,27).
+
+For each real accepted entry, first quiesce publication, exclude older instances
+and validate the exact candidate, both reserved witness positions and complete
+proof budget. Then perform this single ordered composition; all C/V windows
+remain inactive pending §9.1/Q18 qualification
+(OR:design/owner-registry.md:790–822,1078–1080,1188–1210;
+WS:spec/witness-service.md:197–214,340–404,506–514;
+WC:UNRESOLVED_QUESTIONS.md:26–28,33–34):
+
+1. Obtain the acknowledged **exact witness intent**, retaining its original
+   wrapper/predecessor/receipt before any authoritative registry commit.
+2. Obtain a **fresh registry C handoff** and atomically commit the frozen content,
+   completion metadata, exact outcome/watermark and C-use transition together.
+   C remains private; it grants no resolved visibility.
+3. Have the independent bridge verify that **exact durable C commit**, including
+   complete content inventory, completion/use revision, original intent and
+   independent monotonic completion authority. A writer digest is insufficient.
+4. Obtain the acknowledged **matching witness resolution plus a fresh, complete,
+   challenged read** proving the exact resolution and current intent/head/control
+   state. A successful retry lookup alone cannot discharge the read obligation.
+5. Obtain a **fresh registry V handoff**, revalidate exact C, resolution, head,
+   authority and predecessor under final serialization, and atomically commit
+   visibility and V-use. Subsequent freshness follows its separate F window.
+
+The registry and WC1 share **no H, reserve or use CAS**. Each owns its qualified
+window and clock/deadline domain; no cross-host absolute monotonic comparison
+is implied. Every remote call, including time collection, bridge verification,
+append, audit/custodian work, proof pages, reconnects and retries, is capped by
+the registry operation's **remaining original** at-most-five-second or stricter
+budget. No phase renews it, and no final lock spans a remote call. WC1's relative
+timeout fields alone cannot enforce an unseen whole registry attempt; qualify
+caller-wide propagation/cancellation before activation. An expired caller cannot
+receive a late V success; unknown outcomes stay fenced for exact recovery
+(OR:design/owner-registry.md:796–822,1063–1074,1172–1186,1292–1298;
+WS:spec/witness-service.md:239–243,504,591–593;
+WC:spec/policy-v1.md:100–106; WC:UNRESOLVED_QUESTIONS.md:27–28).
 
 Keep sole-writer serialization, publication quiescence and old-instance exclusion
 across the intent/commit/resolution sequence, but perform qualified-time collection
@@ -811,7 +910,10 @@ five-second decision budget or its stricter remaining deadline, without renewal.
 Unknown latency, an unqualified handoff or insufficient remaining budget refuses.
 This separation does not waive acknowledged intent before authoritative commit,
 independently verified durable commit before matching resolution, resolution before
-publication, or fencing and exact-candidate recovery after an uncertain outcome.
+publication, or fencing and exact-candidate recovery after an uncertain outcome
+(OR:design/owner-registry.md:796–814,1055–1080,1188–1209;
+WS:spec/witness-service.md:369–378,495–504;
+WC:UNRESOLVED_QUESTIONS.md:23,27–28).
 
 One checkpoint per real entry, no batching or owner-root-change op in v0.
 Freshness-only state follows §5.2, not this witnessed inventory; a real candidate
@@ -819,7 +921,40 @@ binds the freshness base/head transition and every publication dependency.
 An intent or signed checkpoint alone is never publication success. Failed or
 uncertain intent fences old authority even without local commit. Unknown
 outcome requires fresh challenged discovery; unresolved intent requires approved
-exact-candidate recovery, never automatic cancellation or silent downgrade.
+exact-candidate recovery, never automatic cancellation or silent downgrade
+(OR:design/owner-registry.md:816–822;
+WS:spec/witness-service.md:334–337,369–405,506–514;
+WC:UNRESOLVED_QUESTIONS.md:27,38).
+
+**Proposed archive boundary; no implementation or activation.** WC1 archive
+retention covers WC1 records, controls, original receipts and audit state only.
+Registry FreshnessAnchor and full publication history, C/V/F completion/use
+metadata and visibility outcomes require their own independently retained,
+monotonic protection under Q18. A WC1 tuple or archive acknowledgment does not
+prove that no later registry use/publication existed. The following are proposed
+adapter capabilities, not existing WC1 wire methods
+(OR:design/owner-registry.md:408–420,1188–1209;
+WS:spec/witness-service.md:475–504,610–616;
+WC:UNRESOLVED_QUESTIONS.md:21–23,30).
+
+| Capability | Bridge boundary and required evidence |
+| --- | --- |
+| Retain | Bridge may submit exact wrappers, original receipts, head/proof/control and custody/transaction evidence to an independently authorized archive before relying on its retention acknowledgment; authenticate scope, bytes and durable coverage. It grants no registry freshness/use protection (OR:design/owner-registry.md:408–420,766–788,1188–1209; WS:spec/witness-service.md:475–504,610–616; WC:UNRESOLVED_QUESTIONS.md:21–23). |
+| Retrieve | Bridge may retrieve exact historical originals during preparation/reconciliation or authorized offline work, subject to separate archive ACLs. Verify lengths, digests, signatures, scope, ancestry and anchors; retrieved history or an old head cannot substitute for the fresh challenged complete read (OR:design/owner-registry.md:766–788,819–822; WS:spec/witness-service.md:218–243,475–481; WC:UNRESOLVED_QUESTIONS.md:22,30). |
+| VerifyOffline | Offline-only, separately authorized bounded continuity verification preserving the old trusted anchor. Never an automatic online `proof_limit` fallback or permission to serve an incomplete proof (OR:design/owner-registry.md:408–420,819–822; WS:spec/witness-service.md:235–243,506–514; WC:UNRESOLVED_QUESTIONS.md:22,30). |
+| AdvanceAnchor | Offline-only explicit recovery operation: after complete continuity verification **and a new fresh challenged complete-to-head read**, atomically compare/advance the exact protected consumer anchor. Recover a lost acknowledgment as that exact transition; no reset, witness admin/append power or automatic jump. This exceptional offline operation adds no per-append owner approval to ordinary online verified advancement (OR:design/owner-registry.md:408–420,766–788,819–822; WS:spec/witness-service.md:235–243,506–514; WC:UNRESOLVED_QUESTIONS.md:22,27,30). |
+
+**One custodian decision:** WC1 G17 and registry Q10 refer to the same open owner
+selection of provider, independent failure domain, exact-tuple protocol, fresh
+reads, continuity/recovery and worst-case SLA. No on-node, periodic-only or absent
+provider fallback. Q18 separately selects registry content/completion/visibility
+and use protection; choosing that custodian does not settle Q18. Reusing a
+provider would still require explicit namespaces, acknowledgment, retention,
+migration and recovery protocols for registry state. All archive/timing/custody
+qualification and G07/G10 serving gates remain closed
+(OR:design/owner-registry.md:1360,1368,1188–1209;
+WS:spec/witness-service.md:483–523;
+WC:UNRESOLVED_QUESTIONS.md:21–28; WC:spec/policy-v1.md:27–31).
 
 ## 7. Failure, backup and restore
 
@@ -1357,7 +1492,7 @@ recommendations without reopening accepted S4 decisions. Activation is separate.
 | Q7: revocation completion | Decided, 2026-10-24, content review, per owner decision: consumer acknowledgement with explicit consumer sets and durable barriers, or proven expiry of all prior authority; critical actions require a final online check. An intake acknowledgement is never completion. Landed B §6.5 still preserves broker v0 authority/restore fences until migration. Publication receipt/freshness is not completion. |
 | Q8: capacity | Decided, 2026-10-24, content review D36: pages under one complete signed head; Merkle/narrower-domain alternatives deferred. Wire/completeness/retention qualification remains future work; current count AND byte refusal, fence, retention and operator signal stay mandatory. |
 | Q9: unchanged refresh | Decided, 2026-10-24, content review D38=B: 20-second separate freshness publications; no unchanged journal/checkpoint/witness/custodian append, per-entry checkpoint for real changes. S4 now supplies the exact profile/currentness APIs (F §2.9, D38–D41); code re-pin and consumer qualification remain gated. No owner-root-change op; D31 recovery remains separate. |
-| Q10: witness coordination | WS server is selected; independent witness-side bridge, exact eight-to-six adapter and mandatory advancing anchor, content review decision, 2026-10-24. Open with the owner: off-node custodian provider; bridge/candidate/exclusion implementation and strict custodian SLA remain unqualified; recommend independent validation, original evidence retention and no writer credentials. Registrar WC2 stays separate. |
+| Q10: witness coordination / WC1 G17 | WS server is selected; independent witness-side bridge, exact eight-to-six adapter and mandatory advancing anchor, content review decision, 2026-10-24. One shared owner decision selects the off-node custodian provider, failure domain, exact-tuple/fresh-read protocol, continuity/recovery and strict worst-case SLA; bridge/candidate/exclusion implementation remains unqualified. No on-node, periodic-only or absent-provider fallback. Q18 remains a separate registry completion/visibility/use-protection decision; Registrar WC2 stays separate (OR:design/owner-registry.md:1360,1368; WS:spec/witness-service.md:483–523; WC:UNRESOLVED_QUESTIONS.md:25–28,33). |
 | Q11: time activation | Decided, 2026-10-24, content review: durable watermark, zero backward tolerance and explicit recovery. Hold continuity and dedicated-service authdata remain qualification gates; missing independent history fences. |
 | Q12: complete publication/restore | Decided, 2026-10-24, content review: complete chained freshness history and off-node heads retained before use, with §5.2 atomic local publication and fail-closed restore; S4 supplies the wire/anchor; independent storage and complete-history integration remain unqualified. Historical re-verification needs a separate future path; gossip alone cannot prove absent hidden publications. Co-location/partition and no pre-publication deadline remain explicit. |
 | Q13: witness metadata disclosure | Open with the owner: approve what witness/custodian metadata may be disclosed and to which read principals before public distribution. Recommend minimal authenticated disclosure; this design makes no provider or disclosure choice. |
@@ -1384,6 +1519,7 @@ No production activation follows from mocks or two implementations agreeing.
 | 3. Serialized durable storage/bounds | `TestChangedBytesSameIDRefused`, `TestConcurrentHeadConflict`, `TestSyncFailureFences`, `TestSequenceExhaustionNoWrap`, `TestPublicationProofCapRefused`, `TestWitnessWrapperCapRefused` | `TestExactRetrySameOutcome`, `TestCrashReconcilesExactCommit`, `TestBoundedCompleteProofAccepted`, `TestWrapperFitsBeforeIntent`; no writes/intent on preflight refusal. |
 | 4. Enrollment projection | `TestInvalidMirrorFencesWholeLoad`, `TestUnapprovedCommitRefused`, `TestTombstoneHistoryCannotDisappear`, `TestReservedSigsWinsSnapshotWide` | `TestOfflineEnrollmentSignedCommitAccepted`; unchanged P/R and approved E1 rotation. |
 | 5. Journal/witness proof | `TestWriterCannotAppendWitness`, `TestStaleChallengeRefused`, `TestUnresolvedIntentFences`, `TestRestoredCloneCannotServe`, `TestSameHeadCheckpointForkRefused`, `TestAdvancingAnchorMissingRefused`, `TestAnchorTimeRegressionRefused`, `TestCheckpointTimeRegressionRefused`, `TestEightFieldProjectionRefused`, `TestPublicationLinkLossRefused`, `TestIntentOnlyPublicationRefused`, `TestDelayedProofExpiredRefused` | `TestExactIntentCommitResolution`, `TestLostResolutionReceiptFreshHead`, `TestAnchoredSuffixAccepted`, `TestValidatedProjectionReduced`, `TestPublicationBundleVerifiedAtIssue`; real ACL/crash/custodian/exclusion qualification, archive is not a current receipt. |
+| 5b. Bridge composition (PENDING) | `TestBridgeRetryReceiptNotFreshRead`, `TestBridgeTransportTimeNotReadAt`, `TestBridgeObserverRoleRefused`, `TestBridgeRemoteUnderFinalLockRefused`, `TestBridgePhaseBudgetRenewalRefused` | Five paired controls below for §6.2; no code or serving activation. C/V/F, Q18–Q20 and WC1 G07/G10 remain gated (OR:design/owner-registry.md:760–764,796–814,1368–1370; WS:spec/witness-service.md:181–243; WC:spec/policy-v1.md:19–31; WC:UNRESOLVED_QUESTIONS.md:28). |
 | 6. Base snapshots/time/capacity | `TestHeadChangeStaleSnapshotRefused`, `TestHeadChangeOldSnapshotRefRefused`, `TestHeadChangeMissingRecordRefused`, `TestHeadChangeMissingReissueRefused`, `TestHeadChangeMissingPriorCheckpointRefused`, `TestHeadChangeWrongPriorCheckpointRefused`, `TestStaleSnapshotRefused`, `TestEqualIssueTimeDifferentBytesRefused`, `TestCumulativeRemovalRefused`, `TestGapRefused`, `TestSplitHeadSignalsAndRefuses`, `TestSnapshotCapacitySignalsWithoutDrop`, `TestTimeLossNoPublication` | `TestHeadChangeReissueAccepted` (P-JRN-publish-reissue at F), `TestFreshCompleteSnapshotAccepted`, `TestConsumerAgeBoundary`, `TestMatchingGossipHeadAccepted`; identical cumulative set reissued at greater issued_at, same-transaction add/revocation/1 entry and new checkpoint snapshot reference; issuer profiles, byte/count limits and provider qualification. |
 | 6a. Interval-aware time adapter before any activation | `TestPointTimeViewCannotAccept` (`O=100`, `δ=1`, `A=101` refuses because `U=A`), `TestConsumedHighWaterNotPriorWatermark`, `TestCoarseRoundingNeverAccepts` | `TestIntervalReceiptAccepted`; complete bound receipt with `L`, `U`, exclusive `A`, boot and sample id, native operation/challenge binding, distinct provider history and consumer watermark, conservative rounding with original and converted predicates (§9). This slice implements the pure interval projection for slices 6/7. The timeconf adapter, complete receipt validation and operation/challenge binding remain planned qualification gates. |
 | 6b. QT-2c schemas/use and frozen-content decision (PENDING) | `TestWindowDoubleCheck`, `TestWindowBurnedDifferentH`, `TestWindowUseMetadataMissing`, `TestWindowPostIntentInventoryChanged`, `TestWindowUseRestoreDespiteProviderW` | Exact unused-revision composite commit and independently reconciled content/completion/use history (§9.1.4, §9.1.8); Q18 owner approval and native mapping to T's published template first. No code/codec/adapter activation. |
@@ -1393,6 +1529,23 @@ No production activation follows from mocks or two implementations agreeing.
 | 7a. S5 receipt composition before K3/D12 | `TestReceiptWrongBindingRefused`, `TestReceiptAtExpiryRefused`, `TestReceiptExtensionRefused`, `TestReceiptAfterRestartRefused`, `TestNonFreshnessReceiptIssuerRefused`, `TestLegacyOldBaseCompositionRefused` | `TestFreshnessReceiptCompositionAccepted`, `TestCurrentSnapshotLegacyCompositionAccepted`; merged S5 producers return `Result.FreshnessReceipt`, used via Context after admitted-plan persistence; exclusive fixed expiry, R1–R3 and origin-only audit; row 1b re-pin and adapter qualification remain gates. |
 | 7b. Registry intake S5 and D42 activation | `TestQuietRegistryIntakeWithoutReceiptRefused`, `TestQuietRegistryIntakeRebuiltEvidenceRefused`, `TestRegistryIntakeWitnessUnavailableRefused`, `TestStaleGrantSnapshotWithRegistryReceiptRefused` | `TestQuietRegistryIntakeWithReceiptAccepted` (more than 60 seconds of quiet, same Evidence), `TestReissuedRegistryIntakeEvidenceAccepted`, `TestCurrentGrantSnapshotWithRegistryReceiptAccepted`; planned retaining adapter after row 1b, same whole Evidence across genuine clock updates, domain-specific submission and unchanged external-root age/D42 gate; no effects on refusal. |
 | 8. Restore and consumer activation | `TestRestoredBytesCannotBootstrap`, `TestJointLossFences`, `TestStopWorksWithoutRegistry`, `TestNoCompletionOnIntakeAck`, `TestStoredProofNotCurrentAuthority` | `TestOffNodeExactCandidateRecovery`, `TestReviewedConsumerMigration`, `TestKeymakerPublicationAndStatus`; owner barriers, independent retained proofs/freshness and consumer-specific activation. |
+
+Slice 5b requires the following paired controls; **all are PENDING**, with no
+claim of executable coverage. Each negative must refuse before any further
+visibility/use or freshness advancement; preserve already durable C/intent and its fence
+for exact recovery. A forbidden RPC is prevented before dispatch. Applied
+narrowing controls must fail the named negative rather than a setup error
+(OR:design/owner-registry.md:796–822,1068–1080,1183–1198;
+WS:spec/witness-service.md:197–214,506–514;
+WC:UNRESOLVED_QUESTIONS.md:27–28).
+
+| Planned negative | Nearby positive / acceptance bound | Source pair at pinned revisions |
+| --- | --- | --- |
+| `TestBridgeRetryReceiptNotFreshRead`: supply only an old exact-retry receipt as fresh resolution evidence; refuse. | `TestBridgeRetryThenFreshCompleteRead`: retain that original outcome, then authenticate a new challenged complete matching-resolution read before a new V handoff. | OR:design/owner-registry.md:760–764,782–814; WS:spec/witness-service.md:191–214,218–243,610–616. |
+| `TestBridgeTransportTimeNotReadAt`: substitute TLS, checkpoint or server audit time for protected read completion; refuse `freshness_unavailable`. | `TestBridgeQualifiedCompleteReadAt`: original completion measurement and uncertainty bound to the exact complete read satisfy original and conservative projected age predicates. | OR:design/owner-registry.md:386–394,438–444,760–764; WS:spec/witness-service.md:267–282,598–604; WC:UNRESOLVED_QUESTIONS.md:24. |
+| `TestBridgeObserverRoleRefused`: even an explicitly authorized Observer reader cannot act as registry Bridge; deny append/bridge admission. | `TestBridgeExactPrincipalPinAndReader`: bound Bridge with exact principal/pin and explicit readers membership passes local ACL checks only; separately omit reader membership and refuse the read. | OR:design/owner-registry.md:74–76,782–788; WC:policy/binding.go:25–51,100–121; WC:spec/policy-v1.md:19–31. |
+| `TestBridgeRemoteUnderFinalLockRefused`: attempt provider, witness or custodian RPC while any final lock is held; prevent dispatch and refuse admission. | `TestBridgeRemoteThenFreshLocalWindow`: complete remote phase outside final locks, then obtain fresh phase handoff and perform bounded local atomic act/use under locks. | OR:design/owner-registry.md:796–814,1063–1080; WS:spec/witness-service.md:206–214,495–504; WC:UNRESOLVED_QUESTIONS.md:23,28. |
+| `TestBridgePhaseBudgetRenewalRefused`: expire original D after intent, then supply a newly reset phase allowance; refuse late C/V authority. | `TestBridgeOriginalRemainingBudget`: all phases/pages/retries fit the unchanged original deadline and each distinct fresh local window is admitted within its remaining budget. | OR:design/owner-registry.md:796–814,976–978,1172–1186; WS:spec/witness-service.md:239–243,591–593; WC:spec/policy-v1.md:100–106; WC:UNRESOLVED_QUESTIONS.md:28. |
 
 Slice 6 uses the actual three-entry
 [P-JRN-publish-reissue](https://github.com/relux-works/waggle/blob/f76a400ebeb599b95a9bf9b2c59b522bef0392d8/vectors/swarm-envelope-2/1-positive/P-JRN-publish-reissue.json)
