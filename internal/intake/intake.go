@@ -232,9 +232,17 @@ func withRecord(records map[string][]byte, key string, raw []byte) (verifier.Evi
 	return e, nil
 }
 
-// The configured service subject keeps its protected role even if its current
-// attestation is unavailable. Present(nil) at that key is not identity evidence.
+// Only the configured service subject may enter the protected service collection.
+// It keeps its role even without current evidence; nil is not identity evidence.
 func serviceRecords(records map[string][]byte, pinned, key string, raw []byte) (verifier.Evidence, error) {
+	if key != "" && key != pinned {
+		return verifier.Evidence{}, refuse("key_binding_invalid")
+	}
+	for subject := range records {
+		if subject != pinned {
+			return verifier.Evidence{}, refuse("key_binding_invalid")
+		}
+	}
 	out := rawRecords(records)
 	if out == nil {
 		out = map[string]any{}
@@ -311,7 +319,10 @@ func (f Facts) fill(c *verifier.Context) error {
 
 // preflight charges all supplied raw records plus keys, ordinary CCJ facts and
 // snapshot metadata before Present copies evidence or any signature work. This
-// is the decoded operation budget; transport framing/deadlines are outer gates.
+// is a local decoded-accounting policy, not new wire limits: snapshot metadata
+// costs 128 bytes, Retained records allow 65,536 bytes, and ordinary facts use
+// canonical encoded size plus depth16/string8192/array64 bounds. Encoding those
+// facts can allocate before the budget is checked; transport gates are external.
 func (f Facts) preflight(total int) error {
 	charge := func(n int) error {
 		if n > MaxEvidenceBytes-total {

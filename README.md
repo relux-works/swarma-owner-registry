@@ -89,6 +89,9 @@ CCJ types, including `int64` numbers. Nil means unavailable; nonnil empty
 collections mean available and empty. All authority roots, owner and purpose
 policy come from `Config`; dynamic facts cannot override them. The configured
 service key retains its protected role even without a current attestation.
+Only that exact configured subject may be admitted as a service or appear in
+`Facts.Services`; another subject refuses `key_binding_invalid` before profile
+verification, including when used as delegation evidence.
 
 A grant additionally requires leaf-first `Parents` and the caller's protected
 concrete authorization `Request` (`key`, `action`, `target`), plus assurance
@@ -104,16 +107,21 @@ not cumulative continuity against historical snapshots.
 | --- | --- |
 | Selected-type byte limit, before parsing | `request_too_large`; 65,536 bytes for grants, 8,192 for attestations/snapshots |
 | Closed routing and bounded CCJ shape | `record_type_unsupported`, pinned `envelope_malformed`, `request_invalid`, `envelope_type_mismatch` |
-| Protected configuration, class and evidence preflight | `verification_unavailable`, `key_class_unsupported`, `request_too_large`, `grant_chain_malformed` |
+| Protected configuration, class and evidence preflight | `verification_unavailable`, `key_class_unsupported`, `request_too_large`, `grant_chain_malformed`; unpinned service subjects/evidence refuse `key_binding_invalid` |
 | Published profile verifier | Unchanged typed codes, including `envelope_signature_invalid`, `key_binding_invalid`, `key_binding_unavailable`, `grant_root_unknown`, `grant_not_narrowing`, `revoked` and time/watermark/assurance refusals |
 | Exact-byte binding | `id_journal_unavailable`, `envelope_conflict`; grant E8 also runs at its original point inside `Authorize` |
 
 The adapter uses the pinned record reader's depth 16, string 8,192 and array
-64 bounds. It precharges supplied raw evidence, keys, ordinary CCJ facts and
-snapshot metadata against a 512 KiB decoded operation budget before copying
-facts or verifying signatures. Chains permit at most four records and 262,144
-aggregate grant bytes. Transport encoding, principal ACLs, deadline/concurrency
-limits and qualified current-fact acquisition belong to the later service.
+64 wire bounds. Its local decoded-accounting policy also applies those bounds
+to ordinary `Facts`, charges their canonical encoded size, reserves 128 bytes
+per snapshot's metadata, and permits 65,536 bytes per `Retained` entry. These
+are local accounting choices, not additional protocol wire limits. Raw evidence,
+keys and those charges must fit a 512 KiB decoded operation budget before the
+immutable `Present` snapshots and signature work. Ordinary facts are encoded
+before charging, so that encoding may allocate before over-budget refusal.
+Chains permit at most four records and 262,144 aggregate grant bytes. Transport
+encoding, principal ACLs, deadline/concurrency limits and qualified current-fact
+acquisition belong to the later service.
 
 `Accepted` carries the content `ID`, `Type`, authority-domain `IssuerRoot` and
 an owned copy of the exact `Bytes`. Refusals return nil. Calls leave caller
@@ -144,9 +152,12 @@ heavy-slot --label registry -- gofmt -w internal/contracts/*.go internal/pins/*.
 `go build` checks the three library packages; `go test` covers policy parsing,
 closed gates, role separation, dependency pins and signed intake refusals and
 positive controls; `go vet` checks those packages. Intake tests read public
-fixtures from the exact downloaded module under `GOMODCACHE`, which must be
-set explicitly. Run `heavy-slot --label registry -- go mod download all` to
-populate that cache when needed.
+fixtures from the build-selected module directory returned by
+`go list -m -json github.com/relux-works/waggle`, checking the exact module path,
+reviewed version and absence of replacements. Standard Go configuration,
+including a `GOENV`-only `GOMODCACHE`, is supported; missing fixtures fail closed.
+Run `heavy-slot --label registry -- go mod download all` to populate the selected
+cache when needed.
 Build/module artifacts go to the configured caches, tests report to stdout and
 formatting updates source files. There is no executable binary or generated
 service state. The scheduling wrapper serializes shared-host work; it is not a

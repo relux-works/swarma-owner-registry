@@ -6,11 +6,15 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/relux-works/swarma-owner-registry/internal/intake"
@@ -18,7 +22,79 @@ import (
 	"github.com/relux-works/waggle/record"
 )
 
-const moduleVersion = "waggle@v0.0.0-20261024213811-9b42338b8a57"
+const (
+	modulePath    = "github.com/relux-works/waggle"
+	moduleVersion = "v0.0.0-20261024213811-9b42338b8a57"
+)
+
+type fixtureModule struct {
+	Path, Version, Dir string
+	Replace            *fixtureModule
+}
+
+func pinnedFixtureDirectory(m fixtureModule) (string, error) {
+	if m.Path != modulePath || m.Version != moduleVersion || m.Dir == "" || m.Replace != nil {
+		return "", fmt.Errorf("fixture module identity differs from reviewed pin or has no directory")
+	}
+	return m.Dir, nil
+}
+
+var fixtureLocation struct {
+	sync.Once
+	dir string
+	err error
+}
+
+func fixtureDirectory(t *testing.T) string {
+	t.Helper()
+	fixtureLocation.Do(func() {
+		// Inherit Go's selected environment, including GOENV-only module caches.
+		// Every test command and this subprocess run inside the scheduling wrapper.
+		cmd := exec.Command("go", "list", "-m", "-json", modulePath)
+		cmd.Dir = "../.."
+		raw, err := cmd.Output()
+		if err != nil {
+			fixtureLocation.err = fmt.Errorf("locate pinned fixture module: %w", err)
+			return
+		}
+		var m fixtureModule
+		if err = json.Unmarshal(raw, &m); err != nil {
+			fixtureLocation.err = err
+			return
+		}
+		fixtureLocation.dir, fixtureLocation.err = pinnedFixtureDirectory(m)
+	})
+	if fixtureLocation.err != nil {
+		t.Fatal(fixtureLocation.err)
+	}
+	return fixtureLocation.dir
+}
+
+// Fixture discovery accepts the reviewed module directory and refuses changed path/version, replacements or absent directories.
+func TestFixtureModuleIdentityRefused(t *testing.T) {
+	valid := fixtureModule{Path: modulePath, Version: moduleVersion, Dir: fixtureDirectory(t)}
+	if dir, err := pinnedFixtureDirectory(valid); err != nil || dir != valid.Dir {
+		t.Fatalf("valid fixture directory refused: %v", err)
+	}
+	for _, name := range []string{"path", "version", "directory", "replacement"} {
+		t.Run(name, func(t *testing.T) {
+			m := valid
+			switch name {
+			case "path":
+				m.Path = "example.org/other"
+			case "version":
+				m.Version = "v0.0.0"
+			case "directory":
+				m.Dir = ""
+			case "replacement":
+				m.Replace = &valid
+			}
+			if dir, err := pinnedFixtureDirectory(m); dir != "" || err == nil {
+				t.Fatal("changed module identity admitted")
+			}
+		})
+	}
+}
 
 type sample struct {
 	kind     string
@@ -75,11 +151,7 @@ func load(t *testing.T, name string) sample {
 	if strings.HasPrefix(name, "P-") {
 		folder = "1-positive"
 	}
-	cache := os.Getenv("GOMODCACHE")
-	if cache == "" {
-		t.Fatal("set GOMODCACHE to the downloaded pinned module cache")
-	}
-	raw, e := os.ReadFile(filepath.Join(cache, "github.com/relux-works", moduleVersion, "vectors/swarm-envelope-2", folder, name+".json"))
+	raw, e := os.ReadFile(filepath.Join(fixtureDirectory(t), "vectors/swarm-envelope-2", folder, name+".json"))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -256,6 +328,43 @@ func TestWrongIssuerScopeRefused(t *testing.T) {
 	k, _ := publicKey(81)
 	object(object(s.document["roles"])[string(pins.GrantRoot)])["key"] = k
 	s.config = config(t, s.document)
+	check(t, s, "key_binding_invalid")
+}
+
+// Changing only the protected pin rejects the previous service attestation, with or without cached service evidence.
+func TestProtectedServiceSubjectAttestationRefused(t *testing.T) {
+	for _, cached := range []bool{true, false} {
+		t.Run(map[bool]string{true: "cached", false: "submitted-only"}[cached], func(t *testing.T) {
+			s, _ := syntheticService(t)
+			if !cached {
+				s.facts.Services = nil
+			}
+			check(t, s, "accept")
+			alternate, _ := publicKey(96)
+			object(object(s.document["roles"])[string(pins.GrantService)])["key"] = alternate
+			s.config = config(t, s.document)
+			check(t, s, "key_binding_invalid")
+		})
+	}
+}
+
+// A valid delegation stops admitting its old service issuer when only the protected service-subject pin changes.
+func TestProtectedServiceSubjectDelegationRefused(t *testing.T) {
+	s, private := syntheticService(t)
+	s = syntheticDelegation(t, s, private)
+	check(t, s, "accept")
+	alternate, _ := publicKey(96)
+	object(object(s.document["roles"])[string(pins.GrantService)])["key"] = alternate
+	s.config = config(t, s.document)
+	check(t, s, "key_binding_invalid")
+}
+
+// Caller service evidence cannot widen the pinned subject set even alongside valid evidence for the pinned key.
+func TestUnpinnedServiceEvidenceRefused(t *testing.T) {
+	s, _ := syntheticService(t)
+	check(t, s, "accept")
+	alternate, _ := publicKey(96)
+	s.facts.Services[alternate] = s.raw
 	check(t, s, "key_binding_invalid")
 }
 
