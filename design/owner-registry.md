@@ -1215,12 +1215,12 @@ unselected profile); it cannot silently fall back to point time or a raw receipt
 The same C/V/F logical windows require native parity; Linux activation is not
 evidence of it. Select one fixed `mach_continuous_time()` read after all native
 equivalent final exclusions. Apple's pinned
-[Mach header](https://github.com/apple-oss-distributions/xnu/blob/xnu-11215.1.10/osfmk/mach/mach_time.h#L56-L60)
+[Mach header](https://github.com/apple-oss-distributions/xnu/blob/xnu-11215.1.10/osfmk/mach/mach_time.h#L60-L64)
 defines advancement during sleep. Preload the timebase; convert ticks with checked
 rational arithmetic, current elapsed rounded upward and deadline downward.
 No `mach_absolute_time`, sleep-excluding clock or wall-time substitution. Capture
 and validate `kern.bootsessionuuid` outside final locks through protected native
-sysctl; the pinned [XNU declaration](https://github.com/apple-oss-distributions/xnu/blob/xnu-11215.1.10/bsd/kern/kern_sysctl.c#L2686-L2688)
+sysctl; the pinned [XNU declaration](https://github.com/apple-oss-distributions/xnu/blob/xnu-11215.1.10/bsd/kern/kern_sysctl.c#L2869-L2871)
 is read-only. Boot UUID alone does not fence a restored machine image.
 
 Use a separately reviewed continuous-clock domain/platform mapping; do not label
