@@ -2111,7 +2111,7 @@ UID/public bytes never adopt an old generation automatically. A UID-only broker 
 the authoritative withdrawal/revocation delivery, detection bounds, continuity
 and acknowledgment rules; a signed intent cannot attest its own continuing
 validity ([currentness/invalidation][activation-dispatch-current],
-[receiver invalidation][activation-manager-start],
+[receiver invalidation][activation-manager-invalidation],
 [restore fences][activation-restore]).
 
 Where registry publication carries the external root state, preserve D42(a):
@@ -2160,7 +2160,7 @@ selected as a substitute response. Publish and qualify authoritative detection,
 response bounds and complete stop/effect endpoints before claiming that property.
 This may only tighten existing deadlines; publication, acknowledgement or retry
 cannot restart an original stop or security-response obligation
-([receiver stop/deadline rules][activation-manager-start],
+([receiver stop/deadline rules][activation-manager-stop],
 [policy-replacement boundary][activation-broker-reload]).
 
 Order is: separately accepted artifacts and native qualified tuple; exact-content
@@ -2228,7 +2228,7 @@ Source boundaries for these pairs are the
 [activation-dispatch-current]: https://github.com/relux-works/swarma-dispatcher/blob/5558b30ca214745390d82fa3ea92aa85feb6dad5/spec/m0-launch.md#L155-L179
 [activation-dispatch-gates]: https://github.com/relux-works/swarma-dispatcher/blob/5558b30ca214745390d82fa3ea92aa85feb6dad5/spec/m0-launch.md#L363-L374
 [activation-replay]: https://github.com/relux-works/swarma-dispatcher/blob/5558b30ca214745390d82fa3ea92aa85feb6dad5/spec/m0-launch.md#L225-L258
-[activation-manager-start]: https://github.com/relux-works/swarma-user-manager/blob/b6a288d42e89040f4668e37fb71508fb8cd9f844/docs/design/m0-start-invalidation.md#L85-L115
+[activation-manager-start]: https://github.com/relux-works/swarma-user-manager/blob/5db5b8bbeba8af7ed6962c87586ef48a0cd5b0b3/docs/design/m0-start-invalidation.md#L87-L116
 [activation-broker-record]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/internal/qualification/record.go#L19-L73
 [activation-broker-policy]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/internal/policy/policy.go#L16-L42
 [activation-broker-publication]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/internal/qualification/storage_linux.go#L482-L513
@@ -2246,7 +2246,7 @@ Source boundaries for these pairs are the
 [activation-worker-status]: https://github.com/relux-works/swarma-keymaker/blob/14532907e28cbfda6d049955e5e2b7de0bf42554/spec/keymaker-station-caller.md#L275-L310
 [activation-bootstrap]: https://github.com/relux-works/swarma-keymaker/blob/14532907e28cbfda6d049955e5e2b7de0bf42554/spec/keymaker-station-caller.md#L312-L363
 [activation-recreate]: https://github.com/relux-works/swarma-keymaker/blob/14532907e28cbfda6d049955e5e2b7de0bf42554/spec/keymaker-station-caller.md#L547-L562
-[activation-manager-setup]: https://github.com/relux-works/swarma-user-manager/blob/b6a288d42e89040f4668e37fb71508fb8cd9f844/docs/design/first-run-launch-stop.md#L30-L40
+[activation-manager-setup]: https://github.com/relux-works/swarma-user-manager/blob/5db5b8bbeba8af7ed6962c87586ef48a0cd5b0b3/docs/design/first-run-launch-stop.md#L30-L40
 [activation-custodian-scope]: https://github.com/relux-works/swarma-witness/blob/e90b8a2ec1f560167cae93b6078c7ccd0d1fce21/spec/custodian-v1.md#L1-L91
 [activation-custodian-restore]: https://github.com/relux-works/swarma-witness/blob/e90b8a2ec1f560167cae93b6078c7ccd0d1fce21/spec/custodian-v1.md#L190-L239
 [activation-custodian-exclusion]: https://github.com/relux-works/swarma-witness/blob/e90b8a2ec1f560167cae93b6078c7ccd0d1fce21/spec/custodian-v1.md#L249-L277
@@ -2256,5 +2256,7 @@ Source boundaries for these pairs are the
 [activation-broker-reload]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/spec/v0-codex-refresher.md#L96-L104
 [activation-broker-release]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/internal/lease/manager.go#L511-L525
 
-[activation-manager-publisher]: https://github.com/relux-works/swarma-user-manager/blob/b6a288d42e89040f4668e37fb71508fb8cd9f844/docs/design/m0-start-invalidation.md#L40-L60
+[activation-manager-publisher]: https://github.com/relux-works/swarma-user-manager/blob/5db5b8bbeba8af7ed6962c87586ef48a0cd5b0b3/docs/design/m0-start-invalidation.md#L40-L61
+[activation-manager-invalidation]: https://github.com/relux-works/swarma-user-manager/blob/5db5b8bbeba8af7ed6962c87586ef48a0cd5b0b3/docs/design/m0-start-invalidation.md#L63-L83
+[activation-manager-stop]: https://github.com/relux-works/swarma-user-manager/blob/5db5b8bbeba8af7ed6962c87586ef48a0cd5b0b3/docs/design/m0-start-invalidation.md#L233-L262
 [activation-station-cancel]: https://github.com/relux-works/swarma-keymaker/blob/14532907e28cbfda6d049955e5e2b7de0bf42554/spec/keymaker-station-caller.md#L531-L562
