@@ -831,6 +831,70 @@ V must recheck the exact C/head under its final serialization
 WS:spec/witness-service.md:218–243,284–309;
 WC:spec/wire-v1.md:88–100,113–117; WC:UNRESOLVED_QUESTIONS.md:30,33–34).
 
+**Independent evidence from both witnesses (unqualified bridge design).** Call
+the first witness W1 and the confirming custodian W2. Verify each one's original
+evidence against separately protected service/provider identities, signer pins,
+epochs and historical authorization. These custody references use WC1 at
+`29df43b7e8b26d1bce7101c5fc73e8c9b8050b99` for design inspection, without
+changing the module pin. Retain exact W1 wrappers, original receipts
+and complete record/control/intent proofs, W2 original confirmations and fresh
+read evidence, request challenges and protected complete-read measurements.
+A W1 report or relay of W2 state is never custodian evidence by itself. If W1
+carries W2's original signed evidence, independently verify that original, its
+exact transition/view and a challenge bound to the bridge's fresh request.
+Use a bridge-generated unpredictable challenge or a separately accepted,
+purpose-separated cryptographic derivation; a challenge chosen solely by W1
+cannot establish freshness independently of W1. Record and current-control
+proofs need an accepted coherent-view and race/refusal rule. A direct W2 fetch
+costs another budgeted exchange. These delivery/challenge/composition bindings
+are still unspecified by WC1's opaque evidence interface; define them before
+bridge activation, without adding ad hoc members to closed WS responses
+([WS consumer verification:218–243](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L218-L243),
+[WS independent custody:483–504](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L483-L504),
+[WC1 evidence contract:18–35](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/custodian/contract.go#L18-L35)).
+
+A second process or replicated store is insufficient. The proposed custodian
+qualification must establish all of the following; this list does not supply a
+wire protocol or accepting implementation:
+
+- Separate administration and independently protected signing keys/epochs,
+  including authorized historical pins; no shared or derived W1 keys or shared
+  cloud, administrative, recovery or API credentials. Pinning a transport peer
+  alone does not establish independent custody
+  ([WS roles:100–106](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L100-L106),
+  [WS failure domain:483–493](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L483-L493)).
+- A recovery domain and retained originals/anchors outside W1's restore and
+  administrative control; independent verification of authorized submissions
+  against W2's retained predecessor, not replication, a writer digest or W1's
+  signature alone. Original-evidence delivery, identity/epoch codecs and lost-key
+  continuity are open WC1 provider work; Transition currently carries tuples and
+  a transaction string, not a complete verification bundle
+  ([WS retention/restore:475–514](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L475-L514),
+  [WC1 provider shape:11–35](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/custodian/contract.go#L11-L35)).
+- Atomic durable exact compare-previous confirmation over the complete custody
+  tuple and original transaction, plus fresh challenged authoritative record and
+  separate current-control reads. Same-position differences refuse; exact repeats
+  retain the original confirmation. Genesis and migration require external
+  authorization and protected continuity, never empty-store first use or a reset
+  after restore. Exact provider envelopes, limits and recovery remain open
+  ([WS append/genesis:183–214](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L183-L214),
+  [WS custody/restore:483–514](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L483-L514),
+  [WC1 open boundaries:165–175](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/spec/storage-v1.md#L165-L175)).
+- G18 fencing for each W1/W2 and registry writer/bridge/publisher instance through
+  actual write, signature and release, including prepared replies after pause,
+  partition or revocation. Confirmation CAS, heartbeat and flock cannot substitute.
+  Qualify a finite acyclic dependency graph ending in independently trusted
+  nonrollback custody; W1 confirming W2 while W2 confirms W1 supplies no such base
+  ([WC1 G18:26](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L26),
+  [WS trusted dependency:490–493](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L490-L493)).
+
+Verify every custody tuple field and independent record/control anchor before
+deriving the closed JournalWitness projection below. W2 does not attest registry
+content semantics or C's physical durability for the bridge, nor does either
+witness's tuple cover later V/F or Q18 state without its separately approved
+namespace/protocol ([WS durability boundary:495–514](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L495-L514),
+[Q18](#914-versioned-use-transition-and-frozen-content-decision)).
+
 WS's eight-member projection is exactly `{registry_id,owner,registry_seq,
 registry_head,checkpoint_id,checkpoint_time,candidate_digest,previous_checkpoint_id}`.
 Independently validate originals, scope, signatures, full ancestry, challenged
@@ -980,17 +1044,38 @@ WC:UNRESOLVED_QUESTIONS.md:21–23,30).
 | VerifyOffline | Offline-only, separately authorized bounded continuity verification preserving the old trusted anchor. Never an automatic online `proof_limit` fallback or permission to serve an incomplete proof (OR:design/owner-registry.md:408–420,819–822; WS:spec/witness-service.md:235–243,506–514; WC:UNRESOLVED_QUESTIONS.md:22,30). |
 | AdvanceAnchor | Offline-only explicit recovery operation: after complete continuity verification **and a new fresh challenged complete-to-head read**, atomically compare/advance the exact protected consumer anchor. Recover a lost acknowledgment as that exact transition; no reset, witness admin/append power or automatic jump. This exceptional offline operation adds no per-append owner approval to ordinary online verified advancement (OR:design/owner-registry.md:408–420,766–788,819–822; WS:spec/witness-service.md:235–243,506–514; WC:UNRESOLVED_QUESTIONS.md:22,27,30). |
 
-**One custodian decision:** WC1 G17 and registry Q10 refer to the same open owner
-selection of provider, independent failure domain, exact-tuple protocol, fresh
-reads, continuity/recovery and worst-case SLA. No on-node, periodic-only or absent
-provider fallback. Q18 separately selects registry content/completion/visibility
-and use protection; choosing that custodian does not settle Q18. Reusing a
-provider would still require explicit namespaces, acknowledgment, retention,
-migration and recovery protocols for registry state. All archive/timing/custody
-qualification and G07/G10 serving gates remain closed
-(OR:design/owner-registry.md:1360,1368,1188–1209;
-WS:spec/witness-service.md:483–523;
-WC:UNRESOLVED_QUESTIONS.md:21–28; WC:spec/policy-v1.md:27–31).
+**One custodian decision:** WC1 G17 and registry Q10 share the same custody
+choice. For placement, the owner decided (2026-10-26) on a second witness on a
+separate VPS. The prototype uses the same provider, but a separate project and
+account with no shared API token. Platform deployment uses a different provider
+and account. The prototype retains common-provider outage and administrative
+failure risk; separate accounts do not remove that shared failure domain. This
+records the new direction for the existing independent-custody requirement,
+not a claim that the pinned WC1 text already selects a provider
+([WC1 G17:25](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L25),
+[WS strict restore:483–523](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L483-L523)).
+
+For custody, the owner decided (2026-10-26) on **option (a)**: WC1 plus one
+synchronous independent G17 custodian for all consumers, with separately enforced
+old-instance fencing. The weaker option was rejected. Exact predecessor
+confirmation and fresh authoritative reads must fit the remaining original
+operation budget; no on-node, periodic-only or absent-provider fallback is
+permitted. Custodian confirmation is not an instance fence
+([WC1 G17/G18:25–26](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L25-L26),
+[WS confirmation:483–504](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L483-L504)).
+
+For activation, the owner decided (2026-10-26) that this is placement direction,
+not a qualified provider, identity or pin set; deployment on the trust node is a
+separate owner step. Concrete provider/SLA selection, typed confirmation/read and
+original-evidence protocol, independent keys and epochs, recovery domain and
+qualification remain open. Q18's option-(i) format boundary stays decided; its
+residual completion/visibility/use authority remains tied to this custodian.
+Registry namespaces, acknowledgments, retention, migration and recovery still
+need explicit approval. Archive/audit custody remains separate. All activation,
+archive/timing/custody qualification and G07/G10 serving gates stay closed
+([Q18](#914-versioned-use-transition-and-frozen-content-decision),
+[WC1 custody/archive/recovery gates:18–28](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L18-L28),
+[WS recovery:506–523](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L506-L523)).
 
 ## 7. Failure, backup and restore
 
@@ -1174,6 +1259,102 @@ stricter original deadline. A scheduled refresh has an independently authorized
 schedule occurrence and original start too; its 20-second cadence is not its
 execution budget. Retries, witness waits, a new receipt and a new window never
 restart this operation deadline. Overflow in `b+5s` refuses.
+
+**Whole-attempt preflight, including retry/reconnect.** Before starting, and
+again before any retry or reconnect, admit work only if the remaining original
+budget covers that exchange and every still-required barrier/local act. Account
+for connection setup, all populated-stream and current-control checks, exact
+confirmation, independent audit acknowledgment, complete proof pages,
+time/settlement/original-reader/signer work, bridge/authority verification,
+durable local commit and each remaining window's f, epsilon and reserve
+obligations. Unknown bounds do not fit by assumption. A retry receives no new
+allowance; uncertain outcomes stay fenced and exact recovery cannot authorize
+late success for the expired attempt. No remote work moves under final locks.
+This refines the existing original-D composition, not its deadline
+([original budget rule](https://github.com/relux-works/swarma-owner-registry/blob/e5f2a38bcc2d34997f367144f8d15777f4cf0c18/design/owner-registry.md#L901-L916),
+[WS pages/deadlines:235–243](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L235-L243),
+[WC1 G20:28](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L28)).
+
+**Illustrative accounting only: every count, latency and allocation below is an
+unmeasured assumption or arithmetic derived from those assumptions.** The
+five-second ceiling is the existing contract, not a measured performance claim.
+Model a cold exchange as TCP setup plus TLS setup plus request/reply, assumed
+network cost `3*r` for RTT r. Assume extra transfer/flight delays are negligible
+for these tables only; real transfer costs must be added. WC1 currently
+specifies one request per connection without resumption; W2 and audit transport
+profiles are not yet specified, so the model assumes the same cold cost for them,
+not an available connection-reuse saving
+([WC1 TLS policy:13](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/spec/tls-profile.md#L13),
+[WS TLS:157–160](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L157-L160)).
+
+Let S be populated streams, p required proof-page requests, `g=3+p` primary
+requests for one intent/resolution/latest plus pages, and `gF=1+p` for a separate
+F latest plus pages. Assume each primary request checks S record heads and one
+current-control head at W2, and performs one audit-tail check and one audit
+confirmation at the separate audit authority. C+V adds two record confirmations;
+unchanged-head F adds none. Thus, without double-counting nested network flights:
+
+| Assumed workload | W1 exchanges | W2 exchanges | Separate audit exchanges | Derived total exchanges |
+| --- | --- | --- | --- | --- |
+| C+V | g | g(S+1)+2 | 2g | `N = g(S+4)+2` |
+| Separate F | gF | gF(S+1) | 2gF | `N_F = gF(S+4)` |
+
+The stream/control growth and confirmation/audit ordering come from
+[WC1 preflight:71–134](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/service/barrier.go#L71-L134),
+[per-request admission:169–179](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/service/barrier.go#L169-L179),
+[confirmation then audit:247–296](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/service/barrier.go#L247-L296)
+and [WS read audit:610–616](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L610-L616).
+This is a target-service model, not evidence of an accepting WC1 read service:
+[successful latest/proof construction remains closed:133–155](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/service/append.go#L133-L155).
+
+For the assumed small case `S=1, p=2`, `g=5, gF=3`, giving `N=27, N_F=15`.
+Assume C+V non-network work totals 1.600s, allocated as follows; these are caps to
+qualify, not observed timings or generally available allowances:
+
+| Assumed C+V allocation | Assumed seconds |
+| --- | --- |
+| Other time/original/signer/authority remote work | 0.400 |
+| W1/W2/audit processing and local durability | 0.400 |
+| C remaining durable-act f | 0.300 |
+| V remaining durable-act f | 0.150 |
+| Registry preparation/bridge/pre-lock work | 0.200 |
+| C and V epsilon, 0.050 each | 0.100 |
+| Planning slack | 0.050 |
+| Total | 1.600 |
+
+Assume separate F non-network work of 0.900s. For uniform r on all relevant links,
+the derived totals are `3*N*r+1.600s` and `3*N_F*r+0.900s`:
+
+| Assumed RTT on each link | Derived C+V seconds | Derived separate F seconds | Comparison with the existing exclusive five-second ceiling, under these assumptions only |
+| --- | --- | --- | --- |
+| 1–5 ms | 1.681–2.005 | 0.945–1.125 | Nominal arithmetic margin; no tail guarantee. |
+| 20 ms | 3.220 | 1.800 | Fits this assumed small workload only. |
+| 40 ms | 4.840 | 2.700 | C+V leaves only 0.160s nominal margin. |
+| 80 ms | 8.080 | 4.500 | C+V cannot fit this assumed workload. |
+
+Assumed window examples are `s->m<=50ms`; C has `f=300ms, epsilon=50ms,
+T=450ms, R=500ms`; V has `f=150ms, epsilon=50ms, T=300ms, R=350ms`.
+Assuming source delta 400ms and a qualified coverage rule, resulting deltas would
+be 900ms and 750ms. These are unqualified examples of the existing per-window
+predicates below. Reserve covers interval uncertainty once, not extra wall time
+added again. Other services need their own qualified windows; F's history-size
+cost and its own f/T/epsilon/reserve remain unqualified
+([existing window obligations](https://github.com/relux-works/swarma-owner-registry/blob/e5f2a38bcc2d34997f367144f8d15777f4cf0c18/design/owner-registry.md#L1198-L1218)).
+
+Add any extra initial read, independent W2 fetch, Q18 protection, original
+retrieval, retry/reconnect, proof page, recovery or exclusion call not covered by
+the assumed allocations; none is free. DNS, loss, transfer size, TLS extra flights,
+contention and correlated tails can exhaust the budget even when the example
+fits. Either sum disjoint network/processing costs as above or measure inclusive
+W1 calls; never add their nested W2/audit time twice. Preflight must use remaining
+mandatory work, not a mean per-call allowance. Q19 qualification must measure and
+enforce actual setup/exchange tails, stream/page counts, nested audit/custodian
+work, storage size/history/device endpoints, time/original/signer costs,
+cancellation and late-release prevention. Neither percentile latency nor these
+arithmetic examples qualify f or open any gate; Q21 owns the unresolved head-check
+envelope ([WS added round trips:495–504](https://github.com/relux-works/swarma-keymaker/blob/e7c5e1850c29d1f931de3faa24ad39d94da41ada/spec/witness-service.md#L495-L504),
+[WC1 whole-attempt gap:28](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L28),
+[Q19](#10-questions-for-review)).
 
 Exactly one qualified suspend-aware elapsed-clock read occurs after admission
 under **all** final locks, immediately before pure `VerifyWindow`. On Linux
@@ -1407,8 +1588,8 @@ beside absent, restored or conflicting metadata fences; neither local hashing no
 the content witness alone proves that no later use/completion existed.
 
 The independent completion/visibility rollback authority and its protected
-retention/acknowledgment protocol remain open, tied to the custodian provider
-still to be selected under Q10/WC1 G17. Any remote protection
+retention/acknowledgment protocol remain open, tied to the custodian in the
+Q10/WC1 G17 second-witness direction, not qualified by that placement decision. Any remote protection
 step must occur outside final locks, yet must not leave the act/use root eligible
 for rollback or require an impossible post-commit admission renewal. If that
 cannot be demonstrated with the selected atomic protocol, option (i) remains
@@ -1579,7 +1760,7 @@ recommendations without reopening accepted S4 decisions. Activation is separate.
 | Q7: revocation completion | Decided, 2026-10-24, content review, per owner decision: consumer acknowledgement with explicit consumer sets and durable barriers, or proven expiry of all prior authority; critical actions require a final online check. An intake acknowledgement is never completion. Landed B §6.5 still preserves broker v0 authority/restore fences until migration. Publication receipt/freshness is not completion. |
 | Q8: capacity | Decided, 2026-10-24, content review D36: pages under one complete signed head; Merkle/narrower-domain alternatives deferred. Wire/completeness/retention qualification remains future work; current count AND byte refusal, fence, retention and operator signal stay mandatory. |
 | Q9: unchanged refresh | Decided, 2026-10-24, content review D38=B: 20-second separate freshness publications; no unchanged journal/checkpoint/witness/custodian append, per-entry checkpoint for real changes. S4 now supplies the exact profile/currentness APIs (F §2.9, D38–D41); code re-pin and consumer qualification remain gated. No owner-root-change op; D31 recovery remains separate. |
-| Q10: witness coordination / WC1 G17 | Decided rule: the owner decided (2026-10-25) on one synchronous independent custodian serving both specifications, with exact predecessor confirmation and fresh reads within the operation budget; no periodic, local or absent-provider fallback. Provider not yet selected; provider/SLA, typed protocol and qualification remain open, and the gate stays closed. The selected WS stream, independent bridge, exact eight-to-six adapter and advancing anchor remain; bridge/candidate/exclusion implementation is unqualified. Q18 remains a separate open registry completion/visibility/use-protection decision; Registrar WC2 stays separate ([existing Q10:1561](https://github.com/relux-works/swarma-owner-registry/blob/e2b06e6b0d08a50b68dde8c015e6e6a5bbdbb208/design/owner-registry.md#L1561), [WC1 G17:25](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L25)). |
+| Q10: witness coordination / WC1 G17 | Decided direction: the owner decided (2026-10-26) on a second witness on a separate VPS: prototype on the same provider in a separate project/account without a shared API token, retaining common-provider outage/administrative risk; platform on a different provider/account. The owner decided (2026-10-26) on option (a), WC1 plus one synchronous independent G17 custodian for all consumers with separately enforced old-instance fencing; the weaker option was rejected. The owner decided (2026-10-26) that placement is not provider/identity/pin qualification and trust-node deployment is a separate owner step. Concrete provider/SLA, typed confirmation/read/original-evidence protocol, independent keys/epochs, recovery domain and qualification remain open; all gates stay closed. Exact predecessor confirmation and fresh reads fit the original budget; no periodic, local or absent-provider fallback. Selected WS stream, independent bridge, eight-to-six adapter and advancing anchor remain unqualified. Q18 residual authority stays tied to this custodian; its option-(i) boundary stays decided. Registrar WC2 stays separate ([placement and source anchors in §6.2](#62-ws-server-adapter-and-real-transactions)). |
 | Q11: time activation | Decided, 2026-10-24, content review: durable watermark, zero backward tolerance and explicit recovery. Hold continuity and dedicated-service authdata remain qualification gates; missing independent history fences. |
 | Q12: complete publication/restore | Decided, 2026-10-24, content review: complete chained freshness history and off-node heads retained before use, with §5.2 atomic local publication and fail-closed restore; S4 supplies the wire/anchor; independent storage and complete-history integration remain unqualified. Historical re-verification needs a separate future path; gossip alone cannot prove absent hidden publications. Co-location/partition and no pre-publication deadline remain explicit. |
 | Q13: witness metadata disclosure / WC1 G07 | Decided rule: the owner decided (2026-10-25) on closed-by-default disclosure of witness and custodian metadata only to an explicitly approved circle of readers; otherwise isolation applies, without filtering the signed chain. The approved reader set or isolation design, implementation and qualification remain open; the gate stays closed ([existing Q13:1564](https://github.com/relux-works/swarma-owner-registry/blob/e2b06e6b0d08a50b68dde8c015e6e6a5bbdbb208/design/owner-registry.md#L1564), [WC1 G07:15](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L15)). |
@@ -1587,9 +1768,10 @@ recommendations without reopening accepted S4 decisions. Activation is separate.
 | Q15: D40 state and bounds | Decided, recorded 2026-10-25; F §§2.9, 6–7 and D40. Explicit authorized publication genesis, exact FreshnessAnchor and WitnessReadAt, independent 64-publication/532,480-byte bounds; durable state before use. |
 | Q16: D41 recovery/composition | Decided, 2026-10-25: S5 merged at `5f4e7435d75697385ff6ce15a7501ac6f31c8ea5`, S5 §§2.10, 6–7 and D41 (closed). Explicit separate re-anchor keeps the accepted skipped-span fork-detection cost, full retained history and endpoint audit. Merged receipt composition in §5.3 uses the admitted anchor and whole Evidence, with no receipt-failure fallback. Code re-pin, adapter qualification and K3/D12 activation remain separate gates; no weaker legacy Context is authorized. |
 | Q17: D42 external-root currentness | Decided: the owner decided (2026-10-25) on **option (a)**. Operator and grant roots sign snapshot content only when it changes; the registry attests currency with its own multi-snapshot freshness format (§5.3) and cannot alter that content. Options (b), a per-root online freshness signer, and (c), reissue every 60 seconds, were rejected: (a) avoids periodic root signing while retaining distinct content authority. Residual risk: a compromised registry-owner key could withhold a newer root snapshot, hiding revocation. The witness and full retained history mitigate this only if the root's **Signer application checks its own submission was journaled**. That check is the root's obligation; the registry must supply journal inclusion evidence for the exact submission (intake receipt plus authenticated witness head/inclusion proof), not merely an intake acknowledgment. Freshness/1 at F (`f76a400`) binds a single snapshot, so (a) requires the format owner (waggle) to merge a multi-snapshot freshness change and us to pin it. Until that change is merged and pinned, current D32/S5 scope is unchanged: operator-/grant-root snapshots retain their own 60-second age checks, registry receipts cannot extend them, and grant/1, D33 service-key and device intake remain gated on that pin. Publisher coverage and receipt consumption must follow the format owner's specified rule; none is invented here ([prior design:1551](https://github.com/relux-works/swarma-owner-registry/blob/fa6e1ef2e02138a7c935672ec2436709dbc96cf6/design/owner-registry.md#L1551), [F single snapshot:783–803](https://github.com/relux-works/waggle/blob/f76a400ebeb599b95a9bf9b2c59b522bef0392d8/spec/swarm-envelope-2.md#L783-L803), [S5 D42:205–228](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/UNRESOLVED_QUESTIONS.md#L205-L228), [S5 scope:998–1007](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/spec/swarm-envelope-2.md#L998-L1007)). |
-| Q18: QT-2c local content/use format | Decided format boundary: the owner decided (2026-10-25) on §9.1.4 **option (i)**, versioned separation of immutable witnessed content from later atomic local completion/use metadata, bound by a non-circular composite root. The independent completion/visibility rollback authority and protected retention/acknowledgment protocol remain open, tied to the custodian provider still to be selected under Q10/WC1 G17. Exact versioned schema, capacity, genesis/migration, bridge authentication and recovery remain design and qualification work; the decision approves none of those details. No choice is implemented; all C/V/F consume-adapter activation gates stay closed. |
+| Q18: QT-2c local content/use format | Decided format boundary: the owner decided (2026-10-25) on §9.1.4 **option (i)**, versioned separation of immutable witnessed content from later atomic local completion/use metadata, bound by a non-circular composite root. The independent completion/visibility rollback authority and protected retention/acknowledgment protocol remain open, tied to the Q10/WC1 G17 second-witness direction, whose concrete provider/SLA, typed protocol, keys/epochs, recovery domain and qualification remain open. Exact versioned schema, capacity, genesis/migration, bridge authentication and recovery remain design and qualification work; the decision approves none of those details. No choice is implemented; all C/V/F consume-adapter activation gates stay closed. |
 | Q19: QT-2c durable endpoint timing | Durable act plus use, one post-admission suspend-aware read, original <=5-second-or-stricter D and same-process keyless trust are settled requirements. Open with platform and storage owners: actual enforced f or deadline-honoring act for each C/V/F workload, finite T/epsilon/reserve qualification, final common exclusion/order and emergency-stop independence. Unknown bounds keep all windows handoff_unqualified. |
 | Q20: QT-2c provider/template and native parity | Open jointly with broker/platform owners: protected original reader and independent witness contracts, profile/identity codec and frozen-artifact signing staging, original deadline/rate mapping, Linux and mandatory macOS clock/boot representation, native full-flush/rename durability and instance/restore fencing. A template must map the required fields without widening closed wire codecs; no accepting implementation is authorized by this design. |
+| Q21: per-request head-check envelope / WC1 | Open with the owner and WC1: which retained record heads and current-control state must be checked on each request, with what finite stream-count/exchange bound and proof of equivalent rollback protection? S3 checks every populated stream plus current control, so cost grows with S ([WC1 preflight:71–134](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/service/barrier.go#L71-L134)). Under §9.1.1 assumptions p=2, 5ms on every link and 1.600s non-network work, S=41 yields N=227 and 5.005s, already beyond the original five-second ceiling; an assumed S=201 yields 17.005s. These are derived unmeasured examples, not observed consumer inventories or latency. Placement alone does not bound the envelope. Do not omit heads, batch checks or weaken fresh/control coverage without an accepted protocol and qualification; the gate stays closed ([budget model](#911-admission-original-time-and-per-window-budgets), [WC1 G20:28](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L28)). |
 
 ## 11. Implementation slices and evidence plan
 
