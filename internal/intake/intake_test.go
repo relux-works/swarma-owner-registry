@@ -17,14 +17,14 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/relux-works/swarma-envelope/record"
 	"github.com/relux-works/swarma-owner-registry/internal/intake"
 	"github.com/relux-works/swarma-owner-registry/internal/pins"
-	"github.com/relux-works/waggle/record"
 )
 
 const (
-	modulePath    = "github.com/relux-works/waggle"
-	moduleVersion = "v0.0.0-20261026034605-b63d627b19c4"
+	modulePath    = "github.com/relux-works/swarma-envelope"
+	moduleVersion = "v0.0.0-20261026200550-5636986d0de5"
 )
 
 type fixtureModule struct {
@@ -76,7 +76,7 @@ func TestFixtureModuleIdentityRefused(t *testing.T) {
 	if dir, err := pinnedFixtureDirectory(valid); err != nil || dir != valid.Dir {
 		t.Fatalf("valid fixture directory refused: %v", err)
 	}
-	for _, name := range []string{"path", "version", "directory", "replacement"} {
+	for _, name := range []string{"path", "version", "directory", "replacement", "old-path", "old-version"} {
 		t.Run(name, func(t *testing.T) {
 			m := valid
 			switch name {
@@ -88,6 +88,10 @@ func TestFixtureModuleIdentityRefused(t *testing.T) {
 				m.Dir = ""
 			case "replacement":
 				m.Replace = &valid
+			case "old-path":
+				m.Path = "github.com/relux-works/waggle"
+			case "old-version":
+				m.Version = "v0.0.0-20261026034605-b63d627b19c4"
 			}
 			if dir, err := pinnedFixtureDirectory(m); dir != "" || err == nil {
 				t.Fatal("changed module identity admitted")
@@ -218,7 +222,7 @@ func sampleFrom(t *testing.T, v map[string]any) sample {
 		}
 		roles[string(r)] = map[string]any{"key": k, "purpose": purposes[r], "scope": scope}
 	}
-	s.document = map[string]any{"revision": "b63d627b19c4178d34b7cff58f8f6068efeca1a0", "owner": "owner-a", "object_format": "sha1", "roles": roles, "record_types": []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}, "key_classes": []any{"agent", "operator-device", "service"}, "service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)}}
+	s.document = map[string]any{"revision": "5636986d0de5d00c8c744ca2105648d60a48b814", "owner": "owner-a", "object_format": "sha1", "roles": roles, "record_types": []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}, "key_classes": []any{"agent", "operator-device", "service"}, "service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)}}
 	s.config = config(t, s.document)
 	return s
 }

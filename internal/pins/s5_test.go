@@ -7,7 +7,17 @@ import (
 	"github.com/relux-works/swarma-owner-registry/internal/pins"
 )
 
-const legacyProfileRevision = "b63d627b19c4178d34b7cff58f8f6068efeca1a0"
+const legacyProfileRevision = "5636986d0de5d00c8c744ca2105648d60a48b814"
+
+// The new source pin preserves the legacy format but cannot accept the former
+// source identity as current protected policy. No activation follows the repin.
+func TestPreviousEnvelopeSourcePinRefused(t *testing.T) {
+	d := validDocument()
+	d["revision"] = "b63d627b19c4178d34b7cff58f8f6068efeca1a0"
+	refused(t, wire(t, d), pins.RevisionUnsupported)
+	d["revision"] = legacyProfileRevision
+	accepted(t, d)
+}
 
 // The old S4 source pin is refused; the complete legacy profile at S8 is accepted.
 func TestS4PinRefusedAfterS5(t *testing.T) {

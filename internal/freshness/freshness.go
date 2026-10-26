@@ -11,11 +11,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/relux-works/swarma-envelope/record"
+	"github.com/relux-works/swarma-envelope/verifier"
 	"github.com/relux-works/swarma-owner-registry/internal/journal"
 	"github.com/relux-works/swarma-owner-registry/internal/plan"
 	"github.com/relux-works/swarma-owner-registry/internal/qtime"
-	"github.com/relux-works/waggle/record"
-	"github.com/relux-works/waggle/verifier"
 )
 
 // Anchor is exactly the eight-field S4 FreshnessAnchor. Only explicitly

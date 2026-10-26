@@ -9,9 +9,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/relux-works/swarma-envelope/record"
 	f "github.com/relux-works/swarma-owner-registry/internal/freshness"
 	"github.com/relux-works/swarma-owner-registry/internal/journal"
-	"github.com/relux-works/waggle/record"
 )
 
 type currencyStore struct {

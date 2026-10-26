@@ -18,8 +18,9 @@ publication, deployment or qualification evidence.
 
 ## Packages and protected configuration
 
-`internal/contracts` freezes the reviewed S8 revision
-`b63d627b19c4178d34b7cff58f8f6068efeca1a0`, the six legacy service record types
+`internal/contracts` freezes the published source revision
+`5636986d0de5d00c8c744ca2105648d60a48b814`, retaining the S8 format baseline
+`b63d627b19c4178d34b7cff58f8f6068efeca1a0` and the six legacy service record types
 (`attestation/1`, `grant/1`, `revocation/1`, `enrollment/1`, `journal-entry/1`,
 `checkpoint/1`), three key classes (`agent`, `operator-device`, `service`) and
 the exact D33 grant-service profile. `message/1` and `operator-act/1` have no
@@ -668,7 +669,7 @@ storage. This API implements none of those services or the scheduler.
 ## Explicit multi-root currency
 
 The protected `/2` path implements the landed S8 contract at
-[`b63d627`](https://github.com/relux-works/waggle/blob/b63d627b19c4178d34b7cff58f8f6068efeca1a0/spec/swarm-envelope-2.md#7-consumer-gates-and-remaining-risks).
+[`b63d627`](https://github.com/relux-works/swarma-envelope/blob/b63d627b19c4178d34b7cff58f8f6068efeca1a0/spec/swarm-envelope-2.md#7-consumer-gates-and-remaining-risks).
 `journal.NewCurrencySigner` accepts closed `checkpoint/2`, `freshness/2` and
 registry-owned `revocation/1` bodies under independently supplied distinct
 role/key pins. It refuses `/1` publication downgrade. External roots still sign
@@ -738,9 +739,9 @@ witnessed checkpoint and latest selection; an intake acknowledgement is insuffic
 ## Tools
 
 Use Go 1.26.10 (module language version 1.26.0) and `gofmt`. Dependencies are
-limited to the reviewed public `waggle` at `v0.0.0-20261026034605-b63d627b19c4`
+limited to the public `swarma-envelope` at `v0.0.0-20261026200550-5636986d0de5`
 and registrar at `v0.0.0-20261025040811-264660e5dabb`. Module selection uses this
-registrar pin over waggle's older requirement. Its CCJ packages are byte-identical
+registrar pin over the shared envelope module's older requirement. Its CCJ packages are byte-identical
 to that requirement; configuration parsing and the reviewed record package use
 one implementation. `go.mod`, `go.sum` and the dependency policy test retain
 those versions. No other modules are required.
@@ -768,12 +769,15 @@ heavy-slot --label registry -- gofmt -w internal/qtime/*.go internal/snapshot/*.
 closed gates, role separation, dependency pins and signed intake refusals and
 positive controls; `go vet` checks those packages. Intake, enrollment, snapshot and journal tests read public
 fixtures from the build-selected module directory returned by
-`go list -m -json github.com/relux-works/waggle` or
+`go list -m -json github.com/relux-works/swarma-envelope` or
 `go list -m -json github.com/relux-works/swarma-registrar`, checking the exact module path,
 reviewed version and absence of replacements. Standard Go configuration,
 including a `GOENV`-only `GOMODCACHE`, is supported; missing fixtures fail closed.
 Run `heavy-slot --label registry -- go mod download all` to populate the selected
 cache when needed.
+The shared module was renamed without changing its protocol domains, deterministic
+seed labels or canonical vector bytes. Historical design citations retain their
+original revision identities. This source uplift adds no runtime qualification.
 Build/module artifacts go to the configured caches, tests report to stdout and
 formatting updates source files. The build produces no executable binary; only
 storage API calls or temporary storage tests create local state. The scheduling

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/relux-works/swarma-envelope/record"
+	"github.com/relux-works/swarma-envelope/verifier"
 	"github.com/relux-works/swarma-owner-registry/internal/contracts"
-	"github.com/relux-works/waggle/record"
-	"github.com/relux-works/waggle/verifier"
 )
 
 const MaxConfigBytes = 16 * 1024

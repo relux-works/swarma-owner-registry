@@ -1,7 +1,9 @@
 package contracts_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"os/exec"
 	"reflect"
 	"testing"
@@ -21,7 +23,7 @@ func allowed(p modulePolicy) bool {
 	if p.Module.Path != "github.com/relux-works/swarma-owner-registry" || p.Go != "1.26.0" || len(p.Require) != 2 || len(p.Replace)+len(p.Exclude)+len(p.Tool) != 0 {
 		return false
 	}
-	want := map[string]string{"github.com/relux-works/waggle": "v0.0.0-20261026034605-b63d627b19c4", "github.com/relux-works/swarma-registrar": "v0.0.0-20261025040811-264660e5dabb"}
+	want := map[string]string{"github.com/relux-works/swarma-envelope": "v0.0.0-20261026200550-5636986d0de5", "github.com/relux-works/swarma-registrar": "v0.0.0-20261025040811-264660e5dabb"}
 	for _, r := range p.Require {
 		if want[r.Path] != r.Version {
 			return false
@@ -52,7 +54,8 @@ func TestDependencyPolicy(t *testing.T) {
 	}
 }
 
-// The dependency gate detects an added requirement, changed version, missing requirement and replacement beside its valid control.
+// The dependency gate rejects old identities, changed versions, extra/missing
+// requirements and replacements beside the actual selected positive control.
 func TestDependencyPolicyRejectsChanges(t *testing.T) {
 	if !allowed(currentPolicy(t)) {
 		t.Fatal("positive control invalid")
@@ -62,6 +65,20 @@ func TestDependencyPolicyRejectsChanges(t *testing.T) {
 		func(p *modulePolicy) { p.Require[0].Version = "v1.0.0" },
 		func(p *modulePolicy) { p.Require = p.Require[:1] },
 		func(p *modulePolicy) { p.Replace = []any{true} },
+		func(p *modulePolicy) {
+			for i := range p.Require {
+				if p.Require[i].Path == "github.com/relux-works/swarma-envelope" {
+					p.Require[i] = requirement{"github.com/relux-works/waggle", "v0.0.0-20261026034605-b63d627b19c4"}
+				}
+			}
+		},
+		func(p *modulePolicy) {
+			for i := range p.Require {
+				if p.Require[i].Path == "github.com/relux-works/swarma-envelope" {
+					p.Require[i].Version = "v0.0.0-20261026034605-b63d627b19c4"
+				}
+			}
+		},
 	} {
 		p := currentPolicy(t)
 		mutate(&p)
@@ -71,9 +88,47 @@ func TestDependencyPolicyRejectsChanges(t *testing.T) {
 	}
 }
 
+// The actual selected graph contains only the main module and both exact public
+// dependencies: an old transitive identity or any replacement is also forbidden.
+func TestPublishedModuleGraph(t *testing.T) {
+	cmd := exec.Command("go", "list", "-m", "-json", "all")
+	cmd.Dir = "../.."
+	raw, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"github.com/relux-works/swarma-owner-registry": "",
+		"github.com/relux-works/swarma-envelope":       "v0.0.0-20261026200550-5636986d0de5",
+		"github.com/relux-works/swarma-registrar":      "v0.0.0-20261025040811-264660e5dabb",
+	}
+	d := json.NewDecoder(bytes.NewReader(raw))
+	for {
+		var m struct {
+			Path, Version string
+			Replace       any
+		}
+		err = d.Decode(&m)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		v, ok := want[m.Path]
+		if !ok || v != m.Version || m.Replace != nil {
+			t.Fatalf("unapproved selected module: %s@%s", m.Path, m.Version)
+		}
+		delete(want, m.Path)
+	}
+	if len(want) != 0 {
+		t.Fatal("selected module missing", want)
+	}
+}
+
 // Returned registries are copies; service-supported types and D33 profile remain closed.
 func TestClosedRegistries(t *testing.T) {
-	if contracts.Revision != "b63d627b19c4178d34b7cff58f8f6068efeca1a0" {
+	if contracts.Revision != "5636986d0de5d00c8c744ca2105648d60a48b814" {
 		t.Fatal("reviewed revision changed")
 	}
 	if !reflect.DeepEqual(contracts.RecordTypes(), []string{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}) {

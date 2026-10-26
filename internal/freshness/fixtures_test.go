@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/swarma-envelope/record"
+	"github.com/relux-works/swarma-envelope/verifier"
 	f "github.com/relux-works/swarma-owner-registry/internal/freshness"
 	"github.com/relux-works/swarma-owner-registry/internal/journal"
 	"github.com/relux-works/swarma-owner-registry/internal/qtime"
-	"github.com/relux-works/waggle/record"
-	"github.com/relux-works/waggle/verifier"
 )
 
 func object(v any) map[string]any { m, _ := v.(map[string]any); return m }
@@ -67,7 +67,7 @@ var module struct {
 func load(t *testing.T, name string) map[string]any {
 	t.Helper()
 	module.Do(func() {
-		b, e := exec.Command("go", "list", "-m", "-json", "github.com/relux-works/waggle").Output()
+		b, e := exec.Command("go", "list", "-m", "-json", "github.com/relux-works/swarma-envelope").Output()
 		if e != nil {
 			module.err = e
 			return
@@ -80,7 +80,7 @@ func load(t *testing.T, name string) map[string]any {
 			module.err = e
 			return
 		}
-		if m.Path != "github.com/relux-works/waggle" || m.Version != "v0.0.0-20261026034605-b63d627b19c4" || m.Dir == "" || m.Replace != nil {
+		if m.Path != "github.com/relux-works/swarma-envelope" || m.Version != "v0.0.0-20261026200550-5636986d0de5" || m.Dir == "" || m.Replace != nil {
 			module.err = errors.New("unreviewed fixture module")
 			return
 		}

@@ -1,7 +1,7 @@
 // Package plan detaches verifier candidates without changing absence semantics.
 package plan
 
-import "github.com/relux-works/waggle/verifier"
+import "github.com/relux-works/swarma-envelope/verifier"
 
 func bindings(s []verifier.SnapshotBinding) []verifier.SnapshotBinding {
 	if s == nil {

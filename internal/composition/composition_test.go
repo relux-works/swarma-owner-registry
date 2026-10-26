@@ -5,9 +5,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/relux-works/swarma-envelope/record"
+	"github.com/relux-works/swarma-envelope/verifier"
 	c "github.com/relux-works/swarma-owner-registry/internal/composition"
-	"github.com/relux-works/waggle/record"
-	"github.com/relux-works/waggle/verifier"
 )
 
 // Every changed binding refuses exactly, while the original admitted proof

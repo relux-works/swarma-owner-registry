@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/relux-works/waggle/record"
+	"github.com/relux-works/swarma-envelope/record"
 )
 
 // Capacity classification is confined to the root body's entries array,

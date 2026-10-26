@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/relux-works/waggle/verifier"
+	"github.com/relux-works/swarma-envelope/verifier"
 )
 
 func currencyJournal(t *testing.T) (verifier.Context, CurrencyPublication, Signer, []byte, map[string]any) {

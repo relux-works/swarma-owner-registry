@@ -9,9 +9,9 @@ import (
 
 	"github.com/relux-works/swarma-owner-registry/internal/plan"
 
+	"github.com/relux-works/swarma-envelope/record"
+	"github.com/relux-works/swarma-envelope/verifier"
 	"github.com/relux-works/swarma-owner-registry/internal/qtime"
-	"github.com/relux-works/waggle/record"
-	"github.com/relux-works/waggle/verifier"
 )
 
 // Clock contains one caller-qualified interval and independently retained

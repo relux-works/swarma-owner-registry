@@ -1,7 +1,7 @@
 package freshness
 
 import (
-	"github.com/relux-works/waggle/verifier"
+	"github.com/relux-works/swarma-envelope/verifier"
 	"testing"
 )
 

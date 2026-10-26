@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/swarma-envelope/record"
 	"github.com/relux-works/swarma-owner-registry/internal/journal"
 	"github.com/relux-works/swarma-owner-registry/internal/qtime"
-	"github.com/relux-works/waggle/record"
 )
 
 // Each shared negative must retain its pinned refusal with no candidate; the

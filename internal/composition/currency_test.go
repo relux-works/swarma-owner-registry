@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/relux-works/swarma-envelope/record"
+	"github.com/relux-works/swarma-envelope/verifier"
 	c "github.com/relux-works/swarma-owner-registry/internal/composition"
-	"github.com/relux-works/waggle/record"
-	"github.com/relux-works/waggle/verifier"
 )
 
 func consumeCurrency(t *testing.T, f fixture, u c.Use) string {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/relux-works/waggle/verifier"
+	"github.com/relux-works/swarma-envelope/verifier"
 )
 
 // Facts transfer preserves ordinary Evidence without setting receipt-consumption

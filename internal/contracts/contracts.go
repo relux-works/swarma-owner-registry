@@ -1,7 +1,7 @@
 // Package contracts freezes the reviewed S8 dependency and explicit publication profiles, not runtime admission.
 package contracts
 
-const Revision = "b63d627b19c4178d34b7cff58f8f6068efeca1a0"
+const Revision = "5636986d0de5d00c8c744ca2105648d60a48b814"
 
 // CurrencyVersion is an explicit protected selection, never wire negotiation.
 const CurrencyVersion = 2

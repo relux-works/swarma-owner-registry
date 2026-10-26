@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/swarma-envelope/verifier"
 	c "github.com/relux-works/swarma-owner-registry/internal/composition"
-	"github.com/relux-works/waggle/verifier"
 )
 
 func consume(t *testing.T, f fixture, u c.Use) string {

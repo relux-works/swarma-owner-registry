@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/relux-works/swarma-envelope/verifier"
 	"github.com/relux-works/swarma-owner-registry/internal/composition"
 	"github.com/relux-works/swarma-owner-registry/internal/contracts"
 	"github.com/relux-works/swarma-owner-registry/internal/intake"
-	"github.com/relux-works/waggle/verifier"
 )
 
 func currencyRegistry(t *testing.T, name string) (registryFixture, verifier.Evidence) {

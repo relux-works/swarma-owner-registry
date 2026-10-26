@@ -14,8 +14,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/relux-works/swarma-envelope/record"
 	"github.com/relux-works/swarma-owner-registry/internal/contracts"
-	"github.com/relux-works/waggle/record"
 )
 
 const MaxSequence uint64 = 9007199254740991

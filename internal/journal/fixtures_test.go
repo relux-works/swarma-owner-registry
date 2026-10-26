@@ -15,8 +15,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/relux-works/waggle/record"
-	"github.com/relux-works/waggle/verifier"
+	"github.com/relux-works/swarma-envelope/record"
+	"github.com/relux-works/swarma-envelope/verifier"
 )
 
 var moduleLocation struct {
@@ -28,7 +28,7 @@ var moduleLocation struct {
 func fixtureDir(t *testing.T) string {
 	t.Helper()
 	moduleLocation.Do(func() {
-		cmd := exec.Command("go", "list", "-m", "-json", "github.com/relux-works/waggle")
+		cmd := exec.Command("go", "list", "-m", "-json", "github.com/relux-works/swarma-envelope")
 		cmd.Dir = "../.."
 		raw, e := cmd.Output()
 		if e != nil {
@@ -43,7 +43,7 @@ func fixtureDir(t *testing.T) string {
 			moduleLocation.err = e
 			return
 		}
-		if m.Path != "github.com/relux-works/waggle" || m.Version != "v0.0.0-20261026034605-b63d627b19c4" || m.Dir == "" || m.Replace != nil {
+		if m.Path != "github.com/relux-works/swarma-envelope" || m.Version != "v0.0.0-20261026200550-5636986d0de5" || m.Dir == "" || m.Replace != nil {
 			moduleLocation.err = errors.New("fixture module differs from pinned identity")
 			return
 		}

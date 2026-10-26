@@ -3,8 +3,8 @@ package intake_test
 import (
 	"testing"
 
+	"github.com/relux-works/swarma-envelope/verifier"
 	"github.com/relux-works/swarma-owner-registry/internal/pins"
-	"github.com/relux-works/waggle/verifier"
 )
 
 // S5 can mint a real receipt for an aged registry base, but receipt-free intake

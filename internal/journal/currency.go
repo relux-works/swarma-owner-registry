@@ -7,8 +7,8 @@ import (
 	"errors"
 	"reflect"
 
-	"github.com/relux-works/waggle/record"
-	"github.com/relux-works/waggle/verifier"
+	"github.com/relux-works/swarma-envelope/record"
+	"github.com/relux-works/swarma-envelope/verifier"
 )
 
 // NewCurrencySigner extends the isolated owner signer with explicit protected

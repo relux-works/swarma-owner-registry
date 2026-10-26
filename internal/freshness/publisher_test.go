@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/swarma-envelope/record"
+	"github.com/relux-works/swarma-envelope/verifier"
 	f "github.com/relux-works/swarma-owner-registry/internal/freshness"
-	"github.com/relux-works/waggle/record"
-	"github.com/relux-works/waggle/verifier"
 )
 
 // Global publication sequence survives a real head advance. The independent

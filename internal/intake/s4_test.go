@@ -4,10 +4,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/relux-works/swarma-envelope/record"
+	"github.com/relux-works/swarma-envelope/verifier"
 	"github.com/relux-works/swarma-owner-registry/internal/intake"
 	"github.com/relux-works/swarma-owner-registry/internal/pins"
-	"github.com/relux-works/waggle/record"
-	"github.com/relux-works/waggle/verifier"
 )
 
 func evidence(t *testing.T, value any) verifier.Evidence {

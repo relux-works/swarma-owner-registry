@@ -3,7 +3,7 @@ package journal
 import (
 	"bytes"
 
-	"github.com/relux-works/waggle/verifier"
+	"github.com/relux-works/swarma-envelope/verifier"
 )
 
 // Originals are supplied only after external authentication of checkpoint,

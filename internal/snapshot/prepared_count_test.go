@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/relux-works/swarma-envelope/record"
 	"github.com/relux-works/swarma-owner-registry/internal/journal"
-	"github.com/relux-works/waggle/record"
 )
 
 // Independently signed, byte-bounded 64/65-key snapshots distinguish count

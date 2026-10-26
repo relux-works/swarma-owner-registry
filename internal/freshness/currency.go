@@ -7,9 +7,9 @@ import (
 	"errors"
 	"reflect"
 
+	"github.com/relux-works/swarma-envelope/record"
+	"github.com/relux-works/swarma-envelope/verifier"
 	"github.com/relux-works/swarma-owner-registry/internal/journal"
-	"github.com/relux-works/waggle/record"
-	"github.com/relux-works/waggle/verifier"
 )
 
 const MaxCurrencyStateBytes = 16777216

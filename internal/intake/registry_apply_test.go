@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relux-works/swarma-envelope/verifier"
 	"github.com/relux-works/swarma-owner-registry/internal/intake"
-	"github.com/relux-works/waggle/verifier"
 )
 
 // Claim: while an admitted effect is in progress, both whole-premise replacement
