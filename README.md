@@ -18,12 +18,13 @@ publication, deployment or qualification evidence.
 
 ## Packages and protected configuration
 
-`internal/contracts` freezes the reviewed S5 revision
-`5f4e7435d75697385ff6ce15a7501ac6f31c8ea5`, six service-supported record types
+`internal/contracts` freezes the reviewed S8 revision
+`b63d627b19c4178d34b7cff58f8f6068efeca1a0`, the six legacy service record types
 (`attestation/1`, `grant/1`, `revocation/1`, `enrollment/1`, `journal-entry/1`,
 `checkpoint/1`), three key classes (`agent`, `operator-device`, `service`) and
 the exact D33 grant-service profile. `message/1` and `operator-act/1` have no
-standalone intake profile here. `freshness/1` remains an internal registry publication in S5; it has no intake path.
+standalone intake profile here. `freshness/1` and `freshness/2` remain internal publications without intake routes.
+Protected currency version 2 selects `checkpoint/2` in place of `checkpoint/1`.
 
 `internal/pins.Parse` accepts caller-protected CCJ-1 JSON, at most 16 KiB and
 eight container levels. It uses the pinned `record.Parse` and registrar `ccj`
@@ -32,7 +33,11 @@ caller supplies trusted configuration bytes, never request or repository data.
 No configuration file is opened by this package.
 
 The top-level members are `revision`, `owner`, `object_format`, `roles`, `record_types`,
-`key_classes`, `service_profile` and optional `activation`. The revision and
+`key_classes`, `service_profile` and optional `activation` and
+`registry_currency_version`. Omission preserves legacy version 0; explicit
+version 1 retains `/1`, and version 2 selects `/2`. Other values refuse
+`profile_unsupported`. Version 2 requires the matching `checkpoint/2` type set;
+there is no profile negotiation or downgrade. The revision and
 complete type/class sets must match the compiled contract; arrays cannot add,
 duplicate or omit entries. Owner is a nonempty UTF-8 string of at most 255 bytes.
 `object_format` is required and exactly `sha1` or `sha256`; omission, other
@@ -76,7 +81,8 @@ opening one leaves the others closed and implements none of those later slices.
 The legacy `Facts`/`Accept` path supplies no S5 receipt, requirement flag or
 margin. `internal/intake.Registry` separately retains the complete snapshot
 premise and uses `internal/composition` for acknowledged receipt consumption.
-This adds no activation gate or external-root currency waiver.
+The default profile keeps registry-only coverage; explicit version 2 adds the
+pinned external-root currency rule below. Neither profile activates a service.
 
 The immutable `Config` exposes:
 
@@ -85,7 +91,7 @@ The immutable `Config` exposes:
   signatures or activation dependencies.
 - `CheckPurpose5`: exact requested root and purpose against the protected scope.
 - `IsOpen` and `Require`: gate queries and typed closed-gate refusals.
-- `VerifierContext`: a fresh immutable snapshot of static S5 pins only. Signed,
+- `VerifierContext`: a fresh immutable snapshot of static pins and protected currency version only. Signed,
   time, generation and witness evidence remain unavailable. Consumers must
   enforce their dependent gates and supply qualified evidence separately.
 
@@ -637,9 +643,9 @@ For a new `revocation/1`, `Registry.Accept` instead selects
 own-age path requires no receipt or acknowledgement and preserves external-root
 age checks. Successful submission neither updates the retained premise nor
 mints authority. After the replacement's committed head is fully F-verified and
-acknowledged, its newly minted receipt can authorize its new Evidence. Grants,
-devices and services are excluded from this retaining path; their existing
-legacy routing and external-root age checks remain unchanged.
+acknowledged, its newly minted receipt can authorize its new Evidence. In legacy profiles, grants,
+devices and services are excluded from this retaining path. Explicit `/2` uses
+the required exact-root coverage rule below.
 
 An early `Accepted` is only a candidate. `Registry.Apply(candidate, boundary,
 effect)` repeats full admission of its exact bytes under the caller's typed
@@ -657,13 +663,82 @@ still running, `Apply` retires further calls, waits for that callback and refuse
 an already dispatched effect cannot be undone. A saved callback cannot dispatch
 after `Apply` returns. The caller still holds actual external exclusion through
 callback completion and owns effects, clock/witness authentication and durable
-storage. This API implements none of those services, the scheduler or pending
-external-root freshness formats.
+storage. This API implements none of those services or the scheduler.
+
+## Explicit multi-root currency
+
+The protected `/2` path implements the landed S8 contract at
+[`b63d627`](https://github.com/relux-works/waggle/blob/b63d627b19c4178d34b7cff58f8f6068efeca1a0/spec/swarm-envelope-2.md#7-consumer-gates-and-remaining-risks).
+`journal.NewCurrencySigner` accepts closed `checkpoint/2`, `freshness/2` and
+registry-owned `revocation/1` bodies under independently supplied distinct
+role/key pins. It refuses `/1` publication downgrade. External roots still sign
+their own changed content. `BuildCurrencyPublication` takes a complete qualified
+index anchor, gap-free entries and all exact originals. A real publication must
+add a new registry snapshot; re-adding the previous snapshot cannot satisfy that
+rule. The pure J verifier authenticates every position and derives every root's
+latest cumulative snapshot. The caller's capacity callback checks its complete
+archive and smaller carrier/store quotas before custody. A candidate grants no
+publication, inclusion or durability authority.
+
+`freshness.Publisher` accepts versioned `/2` retained state through its existing
+qualified Recovery/Persistence boundary. `CurrencyProof` archives the explicit
+index anchor (including null genesis endpoints), suffix, originals and whole
+snapshot map; it never infers missing root history. `CurrencyRoots` is separate
+protected configuration and `CurrencyPinIdentity` binds it into local version 2
+state. Each idle publication repeats the checkpoint's exact ordered coverage and
+head. New publications archive their complete proof and detached Plan before
+visibility. The version 2 state digest uses `freshness-state-v2` plus a newline;
+legacy JSON and `freshness-state-v1` digest bytes remain unchanged. Explicitly
+qualified migration may retain archival `/1` history; F enforces the first `/2`
+head advance. Recovery must supply the newly qualified complete index, exact
+state inventory and independently protected monotonic version/pin floors, and
+must fence old instances. A configuration flag or local digest supplies none of
+those guarantees.
+
+`CurrencyPersistence.Preflight` checks a conservative maximum serialized next
+state before signing. Complete history is never evicted. Actual JSON is checked
+again before Commit. The canonical storage ceiling is 16,777,216 bytes, with
+33,554,432 bytes for staging plus committed state; smaller caller quotas must
+also pass. The existing exact CAS acknowledgement and uncertain-write fencing
+still apply. The unsigned capacity probe in each producer exercises S8's
+before-signature whole-call size gate; it never grants proof authority. The
+16 MiB local archive bound and the before-signing size reserve may refuse before
+the format ceiling. Missing complete history, ordinary checkpoint-age failure
+or over-capacity proof requires independently qualified complete-history
+provisioning, never truncation or synthetic time.
+
+`intake.NewCurrencyRegistry` requires protected version 2, retains the original
+whole `SignedSnapshots` and `SnapshotJournal` Evidence objects, and requires full
+F plus an exact atomic persistence acknowledgement. The acknowledgement also
+binds the complete derived index and deterministic original inventory; it is a
+caller claim, never proof of actual durability. Persist the derived index
+separately from the original mint-proof Evidence. Rebuilding either whole
+premise cannot authorize consumption. Every `ReplaceSnapshotJournal` call fences
+the held admission, including replacement back to an earlier Evidence value;
+remint with full F before reuse. Snapshot replacement still changes its entire
+Evidence identity.
+
+Only exact receipt coverage can waive a reached root's own-age check. Required
+missing coverage refuses `freshness_receipt_unavailable` even for a fresh root;
+optional missing coverage keeps ordinary own-age verification in that invocation.
+Invalid supplied receipts refuse globally without fallback. Fixed receipt expiry,
+issuer authority, signatures, generations, effective revocations, replay and
+effect-boundary rechecks remain enforced. New snapshot submissions use exact
+submitted bytes with their own-age check; no submission receipt extends age.
+`internal/plan.Clone` detaches both reanchor sets, complete index rows and nullable
+snapshot-id pointers, preserving nil versus present-empty content equality.
+
+These pure interfaces implement no listener, network witness client, native time
+provider, durable `/2` store or independent restore floor. They qualify no root
+application inclusion check, custody service, owner activation or C/V/F runtime.
+The root application must still verify its exact add against an authenticated
+witnessed checkpoint and latest selection; an intake acknowledgement is insufficient.
+
 
 ## Tools
 
 Use Go 1.26.10 (module language version 1.26.0) and `gofmt`. Dependencies are
-limited to the reviewed public `waggle` at `v0.0.0-20261025015329-5f4e7435d756`
+limited to the reviewed public `waggle` at `v0.0.0-20261026034605-b63d627b19c4`
 and registrar at `v0.0.0-20261025040811-264660e5dabb`. Module selection uses this
 registrar pin over waggle's older requirement. Its CCJ packages are byte-identical
 to that requirement; configuration parsing and the reviewed record package use
@@ -675,9 +750,9 @@ cache directory, and put the selected Go toolchain on `PATH`. On a shared host,
 run Go commands through the installed scheduling wrapper:
 
 ```sh
-heavy-slot --label registry -- go build ./internal/composition ./internal/freshness ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
-heavy-slot --label registry -- go test ./internal/composition ./internal/freshness ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
-heavy-slot --label registry -- go vet ./internal/composition ./internal/freshness ./internal/enrollment ./internal/intake ./internal/pins ./internal/contracts
+heavy-slot --label registry -- go build ./internal/composition ./internal/freshness ./internal/journal ./internal/intake ./internal/pins ./internal/contracts ./internal/plan ./internal/snapshot
+heavy-slot --label registry -- go test ./internal/composition ./internal/freshness ./internal/journal ./internal/intake ./internal/pins ./internal/contracts ./internal/plan ./internal/snapshot
+heavy-slot --label registry -- go vet ./internal/composition ./internal/freshness ./internal/journal ./internal/intake ./internal/pins ./internal/contracts ./internal/plan ./internal/snapshot
 heavy-slot --label registry -- gofmt -w internal/composition/*.go internal/freshness/*.go internal/enrollment/*.go internal/contracts/*.go internal/pins/*.go internal/intake/*.go
 heavy-slot --label registry -- go build ./internal/store
 heavy-slot --label registry -- go test ./internal/store -timeout=2h

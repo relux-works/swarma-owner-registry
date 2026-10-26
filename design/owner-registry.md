@@ -191,10 +191,10 @@ the legacy 60-second own-age checks and rebuilds Evidence per admission; it
 still refuses an aged idle registry snapshot until the row 7b retaining adapter
 is implemented and qualified. Entry-point classes and the
 separate new-snapshot submission path are specified in §5.3. Grant/1, D33
-service-key and device intake wait for the format owner's D42(a) multi-snapshot
-freshness change and its pin (§5.3, §10 Q17, row 7c). Until then, their operator-
-and grant-root snapshots retain their own 60-second age checks; a registry
-receipt cannot extend them (D32/S5,
+service-key and device intake use the delivered S8 D42(a) format only under
+explicit protected version 2 (§5.3, §10 Q17, row 7c). Consumer qualification and
+serving remain held. Legacy profiles retain their operator- and grant-root
+60-second own-age checks; a registry-only receipt cannot extend them (D32/S5,
 [S5:spec/swarm-envelope-2.md:998–1007](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/spec/swarm-envelope-2.md#L998-L1007);
 [design baseline:190–195](https://github.com/relux-works/swarma-owner-registry/blob/fa6e1ef2e02138a7c935672ec2436709dbc96cf6/design/owner-registry.md#L190-L195)).
 No function commits, executes effects, fetches or authenticates witness wire.
@@ -618,24 +618,35 @@ receipt construction/persistence, while `Audit` reports origin only. The class
 split accounts for every verification entry point; the `VerifyAttestation`
 device flag intentionally selects two different classes.
 
-D32 separation limits the default S5 scope to the registry-owner domain.
-Operator-root and grant-root snapshots still need their own age at most 60 seconds;
-a valid registry receipt cannot extend them. Grant/1, D33 service-key and device
-intake activation therefore waits for the format owner's **D42(a) multi-snapshot
-freshness change and its pin** (§10 Q17). It must provide a multi-snapshot
-freshness format binding the registry-journaled external-root snapshots. The
-format owner has announced versioned checkpoint/2 and freshness/2 records;
-checkpoint/1 and freshness/1 stay unchanged, with no silent downgrade. The
-proposal is not yet published. Our publisher must cover those snapshots, and
-S5 consumers may accept a registry receipt for those roots only
-through the format owner's specified rule. D42 remains the open format item;
-this design invents no binding schema or consumer age-waiver rule. Until that
-change is merged and pinned, current D32/S5 scope and external-root own-age
-checks remain unchanged. The registry-owner retaining adapter (row 7b) can start
-now; external-root currency is separate row 7c
-([design baseline:617–621](https://github.com/relux-works/swarma-owner-registry/blob/fa6e1ef2e02138a7c935672ec2436709dbc96cf6/design/owner-registry.md#L617-L621),
-[S5 D42:205–228](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/UNRESOLVED_QUESTIONS.md#L205-L228),
-[S5 scope:998–1007](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/spec/swarm-envelope-2.md#L998-L1007)).
+D32 separation still limits legacy profiles to registry-owner own-age waivers.
+The format owner delivered D42(a) in S8 at
+[`b63d627b19c4178d34b7cff58f8f6068efeca1a0`](https://github.com/relux-works/waggle/blob/b63d627b19c4178d34b7cff58f8f6068efeca1a0/spec/swarm-envelope-2.md):
+closed `checkpoint/2` and `freshness/2` bind identical ordered root-role/key/snapshot
+sets, with mandatory registry coverage. Protected version 2 is explicit; `/1`
+bytes and legacy state digests remain unchanged, without negotiation or fallback.
+The entry-point classification above describes legacy profiles. Under `/2`, only
+the exact covered root may waive its own-age check. Required missing coverage
+refuses even when the root is fresh; optional missing coverage uses ordinary
+own-age checks in that invocation. Any invalid supplied receipt refuses globally.
+
+Publisher and consumer integration retains a complete authenticated prefix index
+for every configured root, including qualified absence for omitted roots, and
+all original cumulative snapshots/checkpoints. Never infer external absence from
+a registry-only `/1` index. Each suffix is gap-free and latest selection cannot
+regress; the root Signer application separately verifies its exact submission's
+journal inclusion. Consumers retain both whole immutable Evidence identities,
+commit version/pins/index/history/endpoints/watermarks and audit atomically, and
+remint after restart or premise/head changes. New submissions keep exact-byte
+own-age verification until committed-head F succeeds. Local version 2 codecs and
+detached audit copies preserve the original `/1` encoding.
+
+Format delivery resolves the old format dependency. Publisher durability,
+protected version/pin floors, independent complete-history provisioning, witness
+transport, root application checks and serving/consumer activation remain
+qualification gates. S8 supplies observed-prefix currency, never unpublished-tail
+knowledge or a global revocation deadline. The pure adapters in row 7c activate
+none of those services; 7a/7b receipt lifetime and final effect-boundary obligations
+remain unchanged.
 
 A fresh witness read at an unchanged head cannot discover a withheld newer
 freshness tail. Covered signed predecessor history, retained heads and
@@ -1767,7 +1778,7 @@ recommendations without reopening accepted S4 decisions. Activation is separate.
 | Q14: D39 prior records | Decided, recorded 2026-10-25; F §§2.7, 6 and D39. Every advancing proof supplies both prior entry anchor and exact prior checkpoint via IDJournal, J5a then updated J6; no extra projection timestamp. |
 | Q15: D40 state and bounds | Decided, recorded 2026-10-25; F §§2.9, 6–7 and D40. Explicit authorized publication genesis, exact FreshnessAnchor and WitnessReadAt, independent 64-publication/532,480-byte bounds; durable state before use. |
 | Q16: D41 recovery/composition | Decided, 2026-10-25: S5 merged at `5f4e7435d75697385ff6ce15a7501ac6f31c8ea5`, S5 §§2.10, 6–7 and D41 (closed). Explicit separate re-anchor keeps the accepted skipped-span fork-detection cost, full retained history and endpoint audit. Merged receipt composition in §5.3 uses the admitted anchor and whole Evidence, with no receipt-failure fallback. Code re-pin, adapter qualification and K3/D12 activation remain separate gates; no weaker legacy Context is authorized. |
-| Q17: D42 external-root currentness | Decided: the owner decided (2026-10-25) on **option (a)**. Operator and grant roots sign snapshot content only when it changes; the registry attests currency with its own multi-snapshot freshness format (§5.3) and cannot alter that content. Options (b), a per-root online freshness signer, and (c), reissue every 60 seconds, were rejected: (a) avoids periodic root signing while retaining distinct content authority. Residual risk: a compromised registry-owner key could withhold a newer root snapshot, hiding revocation. The witness and full retained history mitigate this only if the root's **Signer application checks its own submission was journaled**. That check is the root's obligation; the registry must supply journal inclusion evidence for the exact submission (intake receipt plus authenticated witness head/inclusion proof), not merely an intake acknowledgment. Freshness/1 at F (`f76a400`) binds a single snapshot, so (a) requires the format owner (waggle) to merge a multi-snapshot freshness change and us to pin it. Until that change is merged and pinned, current D32/S5 scope is unchanged: operator-/grant-root snapshots retain their own 60-second age checks, registry receipts cannot extend them, and grant/1, D33 service-key and device intake remain gated on that pin. Publisher coverage and receipt consumption must follow the format owner's specified rule; none is invented here ([prior design:1551](https://github.com/relux-works/swarma-owner-registry/blob/fa6e1ef2e02138a7c935672ec2436709dbc96cf6/design/owner-registry.md#L1551), [F single snapshot:783–803](https://github.com/relux-works/waggle/blob/f76a400ebeb599b95a9bf9b2c59b522bef0392d8/spec/swarm-envelope-2.md#L783-L803), [S5 D42:205–228](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/UNRESOLVED_QUESTIONS.md#L205-L228), [S5 scope:998–1007](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/spec/swarm-envelope-2.md#L998-L1007)). |
+| Q17: D42 external-root currentness | Decided: option (a), external roots sign changed content while registry freshness attests observed-prefix currency. S8 delivered the versioned multi-snapshot format at `b63d627b19c4178d34b7cff58f8f6068efeca1a0` ([S8 contract](https://github.com/relux-works/waggle/blob/b63d627b19c4178d34b7cff58f8f6068efeca1a0/spec/swarm-envelope-2.md#7-consumer-gates-and-remaining-risks)). Options (b), an online root freshness signer, and (c), periodic root re-signing, remain rejected. Explicit `/2` integration follows the complete authenticated index and exact receipt coverage rule in §5.3; `/1` own-age behavior is preserved. A compromised registry owner may withhold a newer submission before journaling; no unobserved-tail or global revocation-deadline claim follows. The root Signer application must check its own exact add, authenticated witnessed head and latest selection; an intake acknowledgement is insufficient. Publisher/consumer serving, durable migration, independent floors and root-side inclusion checks still require qualification. |
 | Q18: QT-2c local content/use format | Decided format boundary: the owner decided (2026-10-25) on §9.1.4 **option (i)**, versioned separation of immutable witnessed content from later atomic local completion/use metadata, bound by a non-circular composite root. The independent completion/visibility rollback authority and protected retention/acknowledgment protocol remain open, tied to the Q10/WC1 G17 second-witness direction, whose concrete provider/SLA, typed protocol, keys/epochs, recovery domain and qualification remain open. Exact versioned schema, capacity, genesis/migration, bridge authentication and recovery remain design and qualification work; the decision approves none of those details. No choice is implemented; all C/V/F consume-adapter activation gates stay closed. |
 | Q19: QT-2c durable endpoint timing | Durable act plus use, one post-admission suspend-aware read, original <=5-second-or-stricter D and same-process keyless trust are settled requirements. Open with platform and storage owners: actual enforced f or deadline-honoring act for each C/V/F workload, finite T/epsilon/reserve qualification, final common exclusion/order and emergency-stop independence. Unknown bounds keep all windows handoff_unqualified. |
 | Q20: QT-2c provider/template and native parity | Open jointly with broker/platform owners: protected original reader and independent witness contracts, profile/identity codec and frozen-artifact signing staging, original deadline/rate mapping, Linux and mandatory macOS clock/boot representation, native full-flush/rename durability and instance/restore fencing. A template must map the required fields without widening closed wire codecs; no accepting implementation is authorized by this design. |
@@ -1804,7 +1815,7 @@ No production activation follows from mocks or two implementations agreeing.
 | 7. S4 publisher/currentness after re-pin | `TestFreshnessMissingRefused`, `TestFreshnessStaleRefused`, `TestFreshnessWrongRootRefused`, `TestFreshnessWrongSnapshotRefused`, `TestFreshnessWrongHeadRefused`, `TestFreshnessSameSeqDifferentBindingRefused`, `TestFreshnessBackwardSeqRefused`, `TestFreshnessBackwardTimeRefused`, `TestFreshnessPredecessorMissingRefused`, `TestFreshnessHeadRaceRefused`, `TestFreshnessUnresolvedIntentRefused`, `TestSlowWitnessClosesFreshness`, `TestFreshnessHistoryOmissionRefused`, `TestRestoredFreshnessStateFences`, `TestOldS3RejectsAgedBase`, `TestFreshnessCannotReviveAuthority` | `TestFreshnessKeepsJournalHead`, `TestRealChangeUsesWitnessTransaction`, `TestAgedBaseAcceptedByVerifyFreshness`, `TestFreshnessAtomicRetry`; identical base bytes and unchanged registry/witness positions on healthy freshness; exact effects and boundaries verified, never a global old-verifier waiver. |
 | 7a. S5 receipt composition before K3/D12 | `TestReceiptWrongBindingRefused`, `TestReceiptAtExpiryRefused`, `TestReceiptExtensionRefused`, `TestReceiptAfterRestartRefused`, `TestNonFreshnessReceiptIssuerRefused`, `TestLegacyOldBaseCompositionRefused` | `TestFreshnessReceiptCompositionAccepted`, `TestCurrentSnapshotLegacyCompositionAccepted`; merged S5 producers return `Result.FreshnessReceipt`, used via Context after admitted-plan persistence; exclusive fixed expiry, R1–R3 and origin-only audit; row 1b re-pin and adapter qualification remain gates. |
 | 7b. Registry-owner intake with a retaining adapter | `TestQuietRegistryIntakeWithoutReceiptRefused`, `TestQuietRegistryIntakeRebuiltEvidenceRefused`, `TestRegistryIntakeWitnessUnavailableRefused` | `TestQuietRegistryIntakeWithReceiptAccepted` (more than 60 seconds of quiet, same Evidence), `TestReissuedRegistryIntakeEvidenceAccepted`; can start now, with admitted-anchor persistence acknowledgment from slice 7a required before receipt use. Retain the same immutable whole Evidence for the receipt's lifetime across genuine clock updates; preserve domain-specific submission and no effects on refusal. This registry-owner slice does not wait for D42(a) external-root currency ([design baseline:570–600](https://github.com/relux-works/swarma-owner-registry/blob/fa6e1ef2e02138a7c935672ec2436709dbc96cf6/design/owner-registry.md#L570-L600), [S5:955–965](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/spec/swarm-envelope-2.md#L955-L965)). |
-| 7c. External-root currency under D42(a) (PENDING format change/pin) | `TestStaleGrantSnapshotWithRegistryReceiptRefused` (current S5 registry-only receipt cannot waive external-root age), `TestUnjournaledRootSnapshotWithRegistryReceiptRefused` (even with a current registry receipt) | `TestCurrentGrantSnapshotWithRegistryReceiptAccepted`; new pending pair: `TestJournaledRootSnapshotWithRegistryReceiptAccepted`, under the future format owner's specified rule. Wait for the multi-snapshot freshness change, its pin, publisher coverage and consumer rule; until then retain current operator-/grant-root own-age gates. No effects on refusal; no invented external-root receipt extension ([design baseline:617–621](https://github.com/relux-works/swarma-owner-registry/blob/fa6e1ef2e02138a7c935672ec2436709dbc96cf6/design/owner-registry.md#L617-L621), [S5 D42:205–228](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/UNRESOLVED_QUESTIONS.md#L205-L228), [S5 scope:998–1007](https://github.com/relux-works/waggle/blob/5f4e7435d75697385ff6ce15a7501ac6f31c8ea5/spec/swarm-envelope-2.md#L998-L1007)). |
+| 7c. External-root currency under delivered S8 (qualification held) | `TestStaleGrantSnapshotWithRegistryReceiptRefused`, `TestUnjournaledRootSnapshotWithRegistryReceiptRefused`, `TestRequiredCurrencyCoverageCannotUseOwnAge`, `TestCurrencyOriginalPremisesAndForeignRootRefused` | `TestCurrentGrantSnapshotWithRegistryReceiptAccepted`, `TestJournaledRootSnapshotWithRegistryReceiptAccepted`. Explicit protected `/2` uses the pinned complete-prefix index and exact root coverage; registry-only coverage never extends external age. Publishers retain original history and exact coverage, consumers retain both original Evidence objects and acknowledge the complete derived index/audit. No effects or fallback on refusal. Durable migration, witness/root application checks and serving remain qualification gates (§5.3, Q17). |
 | 8. Restore and consumer activation | `TestRestoredBytesCannotBootstrap`, `TestJointLossFences`, `TestStopWorksWithoutRegistry`, `TestNoCompletionOnIntakeAck`, `TestStoredProofNotCurrentAuthority` | `TestOffNodeExactCandidateRecovery`, `TestReviewedConsumerMigration`, `TestKeymakerPublicationAndStatus`; owner barriers, independent retained proofs/freshness and consumer-specific activation. |
 
 Slice 5b requires the following paired controls; **all are PENDING**, with no
@@ -1855,7 +1866,7 @@ Additional planned S4 controls pair each failure class with named valid controls
 | Proof/query and route caps | `TestFreshness65PublicationsRefused` (freshness_malformed), `TestFreshness65QueriesRefused` (freshness_request_invalid), `TestFreshnessOversizeRecordRefused` (freshness_malformed), `TestFreshnessWrongRouteRefused` (proof_limit) | `TestFreshness64PublicationsAccepted`, `TestFreshness64QueriesAccepted`, `TestFreshnessBundleRouteAccepted` |
 | Explicit re-anchor, never silent fallback | `TestFreshnessNoImplicitReanchor` (normal freshness_gap), `TestFreshnessReanchorGenesisRefused` (freshness_state_invalid), `TestFreshnessReanchorBackwardHeadRefused` (freshness_rollback), `TestFreshnessReanchorEqualHeadForkRefused` (freshness_fork), `TestFreshnessReanchorSnapshotMismatchRefused` (freshness_binding_mismatch), `TestFreshnessReanchorSequenceNotAdvancedRefused`, `TestFreshnessReanchorTimeNotAdvancedRefused` (freshness_rollback) | `TestFreshnessReanchorSameHeadAccepted`, `TestFreshnessReanchorAdvancedHeadAccepted`, `TestFreshnessAdjacentReanchorAccepted` (skip count zero) |
 | Witness and cumulative safety after recovery | `TestFreshnessReanchorWitnessUnavailableRefused`, `TestReanchorCannotSupplyRollbackSafe`, `TestReanchorCumulativeRemovalRefused` (unavailable/invalid evidence, no use) | `TestReanchorQualifiedCumulativeEvidenceAccepted`, `TestFreshnessReanchorAuditPersisted` |
-| Consumer composition | `TestLegacyOldBaseCompositionRefused` (legacy own-age refusal as in V's TestFreshnessCompositionBoundary), all slice 7a receipt, 7b registry-owner intake and 7c external-root refusals | `TestCurrentSnapshotLegacyCompositionAccepted`, `TestFreshnessReceiptCompositionAccepted`, `TestQuietRegistryIntakeWithReceiptAccepted`, `TestReissuedRegistryIntakeEvidenceAccepted`, `TestCurrentGrantSnapshotWithRegistryReceiptAccepted`; retain S5 re-pin/adapter qualification, with new external-root currency additionally requiring row 7c's format change/pin |
+| Consumer composition | `TestLegacyOldBaseCompositionRefused` (legacy own-age refusal as in V's TestFreshnessCompositionBoundary), all slice 7a receipt, 7b registry-owner intake and 7c external-root refusals | `TestCurrentSnapshotLegacyCompositionAccepted`, `TestFreshnessReceiptCompositionAccepted`, `TestQuietRegistryIntakeWithReceiptAccepted`, `TestReissuedRegistryIntakeEvidenceAccepted`, `TestCurrentGrantSnapshotWithRegistryReceiptAccepted`; retain S5 re-pin/adapter qualification, with external-root currency additionally requiring row 7c's explicit S8 profile and publisher/consumer qualification |
 
 Additional planned S5 adapter controls (after row 1b; no execution claimed):
 
@@ -2120,8 +2131,8 @@ the currency allowed by the format owner's accepted multi-snapshot profile.
 The root Signer application must check that its exact submission was journaled;
 intake acknowledgment alone is insufficient. Current single-snapshot freshness
 cannot waive external-root own-age checks or prove this activation remains
-unwithdrawn. Q17's format change/pin, publisher coverage and consumer rule remain
-gates; this section widens no existing registry wire/intake profile. If root
+unwithdrawn. Q17's delivered S8 profile still requires publisher coverage,
+consumer qualification and protected migration before serving; this section widens no existing registry wire/intake profile. If root
 currentness is delivered outside that path, Q26 must identify and qualify its
 independent authority/transport/restore protocol instead; none is guessed here
 ([existing D42(a) boundaries][activation-currency],

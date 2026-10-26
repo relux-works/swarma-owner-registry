@@ -21,7 +21,7 @@ func allowed(p modulePolicy) bool {
 	if p.Module.Path != "github.com/relux-works/swarma-owner-registry" || p.Go != "1.26.0" || len(p.Require) != 2 || len(p.Replace)+len(p.Exclude)+len(p.Tool) != 0 {
 		return false
 	}
-	want := map[string]string{"github.com/relux-works/waggle": "v0.0.0-20261025015329-5f4e7435d756", "github.com/relux-works/swarma-registrar": "v0.0.0-20261025040811-264660e5dabb"}
+	want := map[string]string{"github.com/relux-works/waggle": "v0.0.0-20261026034605-b63d627b19c4", "github.com/relux-works/swarma-registrar": "v0.0.0-20261025040811-264660e5dabb"}
 	for _, r := range p.Require {
 		if want[r.Path] != r.Version {
 			return false
@@ -73,7 +73,7 @@ func TestDependencyPolicyRejectsChanges(t *testing.T) {
 
 // Returned registries are copies; service-supported types and D33 profile remain closed.
 func TestClosedRegistries(t *testing.T) {
-	if contracts.Revision != "5f4e7435d75697385ff6ce15a7501ac6f31c8ea5" {
+	if contracts.Revision != "b63d627b19c4178d34b7cff58f8f6068efeca1a0" {
 		t.Fatal("reviewed revision changed")
 	}
 	if !reflect.DeepEqual(contracts.RecordTypes(), []string{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}) {

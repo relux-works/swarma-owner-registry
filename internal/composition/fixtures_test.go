@@ -67,7 +67,7 @@ func load(t *testing.T, name string) map[string]any {
 			module.err = e
 			return
 		}
-		if m.Path != "github.com/relux-works/waggle" || m.Version != "v0.0.0-20261025015329-5f4e7435d756" || m.Dir == "" || m.Replace != nil {
+		if m.Path != "github.com/relux-works/waggle" || m.Version != "v0.0.0-20261026034605-b63d627b19c4" || m.Dir == "" || m.Replace != nil {
 			module.err = errors.New("unreviewed fixture module")
 			return
 		}
@@ -130,6 +130,19 @@ func setup(t *testing.T, name string) fixture {
 		ctx.Delivery = fact(t, m)
 	}
 	ctx.SignedSnapshots = fact(t, snapshots(t, f))
+	if v, ok := f["registry_currency_version"].(int64); ok {
+		ctx.RegistryCurrencyVersion = int(v)
+	}
+	if v := object(f["snapshot_journal"]); v != nil {
+		journal := map[string]any{"anchor": v["anchor"]}
+		entries := make([]any, 0)
+		for _, r := range v["entries"].([]any) {
+			entries = append(entries, decode(t, r))
+		}
+		journal["entries"] = entries
+		ctx.SnapshotJournal = fact(t, journal)
+	}
+
 	chain := [][]byte{}
 	for _, v := range m["chain"].([]any) {
 		chain = append(chain, decode(t, v))
@@ -188,7 +201,7 @@ func acceptedAdmission(t *testing.T, f fixture) *c.Admission {
 func acknowledged(a *c.Admission) *c.PersistenceAcknowledgement {
 	p := a.Plan()
 	q := a.Projection()
-	return &c.PersistenceAcknowledgement{Anchor: a.Anchor(), Watermark: p.Watermark, Reanchor: p.Reanchor, DecisionFloor: q.DecisionFloor, Boot: q.Boot}
+	return &c.PersistenceAcknowledgement{Anchor: a.Anchor(), Watermark: p.Watermark, Reanchor: p.Reanchor, DecisionFloor: q.DecisionFloor, Boot: q.Boot, SnapshotJournal: p.SnapshotJournal, IDs: p.IDs}
 }
 func use(f fixture, a *c.Admission) c.Use {
 	var ack *c.PersistenceAcknowledgement

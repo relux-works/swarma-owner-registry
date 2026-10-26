@@ -80,11 +80,12 @@ type Pin struct{ Key, Purpose, Scope string }
 
 // Config is immutable after Parse. Its zero value and nil pointer are closed.
 type Config struct {
-	valid        bool
-	owner        string
-	objectFormat string
-	roles        map[Role]Pin
-	gates        map[Gate]bool
+	currencyVersion int
+	valid           bool
+	owner           string
+	objectFormat    string
+	roles           map[Role]Pin
+	gates           map[Gate]bool
 }
 
 // Parse accepts bounded duplicate-free CCJ-1 through the reviewed record reader.
@@ -99,8 +100,16 @@ func Parse(raw []byte) (*Config, error) {
 		return nil, refused(ConfigMalformed)
 	}
 	m, ok := value.(map[string]any)
-	if !ok || !shape(m, "revision owner object_format roles record_types key_classes service_profile", "activation") {
+	if !ok || !shape(m, "revision owner object_format roles record_types key_classes service_profile", "activation registry_currency_version") {
 		return nil, refused(ConfigMalformed)
+	}
+	version := 0
+	if v, exists := m["registry_currency_version"]; exists {
+		n, ok := v.(int64)
+		if !ok || (n != 1 && n != 2) {
+			return nil, refused(ProfileUnsupported)
+		}
+		version = int(n)
 	}
 	objectFormat, ok := m["object_format"].(string)
 	if !ok || (objectFormat != "sha1" && objectFormat != "sha256") {
@@ -113,7 +122,7 @@ func Parse(raw []byte) (*Config, error) {
 	if !ok || owner == "" || len(owner) > 255 || !utf8.ValidString(owner) {
 		return nil, refused(ConfigMalformed)
 	}
-	if err = closedSet(m["record_types"], contracts.RecordTypes(), ProfileUnsupported); err != nil {
+	if err = closedSet(m["record_types"], contracts.RecordTypesForCurrency(version), ProfileUnsupported); err != nil {
 		return nil, err
 	}
 	if err = closedSet(m["key_classes"], contracts.KeyClasses(), KeyClassUnsupported); err != nil {
@@ -134,7 +143,7 @@ func Parse(raw []byte) (*Config, error) {
 			return nil, refused(ConfigMalformed)
 		}
 	}
-	c := &Config{owner: owner, objectFormat: objectFormat, roles: make(map[Role]Pin), gates: make(map[Gate]bool)}
+	c := &Config{currencyVersion: version, owner: owner, objectFormat: objectFormat, roles: make(map[Role]Pin), gates: make(map[Gate]bool)}
 	seen := map[string]bool{}
 	for _, r := range Roles() {
 		value, exists := roleMap[string(r)]
@@ -302,7 +311,11 @@ func (c *Config) CheckProfile(kind, class string) error {
 	if c == nil || !c.valid {
 		return refused(ConfigUnavailable)
 	}
-	if !contracts.HasRecordType(kind) {
+	supported := false
+	for _, profile := range contracts.RecordTypesForCurrency(c.currencyVersion) {
+		supported = supported || kind == profile
+	}
+	if !supported {
 		return refused(ProfileUnsupported)
 	}
 	if !contracts.HasKeyClass(class) {
@@ -345,6 +358,7 @@ func (c *Config) VerifierContext() (verifier.Context, error) {
 		}
 		*fields[i] = e
 	}
+	out.RegistryCurrencyVersion = c.currencyVersion
 	out.OperatorOwner = out.RegistryOwner
 	return out, nil
 }

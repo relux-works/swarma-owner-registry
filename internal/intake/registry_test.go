@@ -68,7 +68,7 @@ func registryMint(t *testing.T, f *registryFixture) *composition.Admission {
 
 func registryAcknowledge(f *registryFixture, a *composition.Admission) {
 	p, q := a.Plan(), a.Projection()
-	f.current.Persisted = &composition.PersistenceAcknowledgement{Anchor: a.Anchor(), Watermark: p.Watermark, Reanchor: p.Reanchor, DecisionFloor: q.DecisionFloor, Boot: q.Boot}
+	f.current.Persisted = &composition.PersistenceAcknowledgement{Anchor: a.Anchor(), Watermark: p.Watermark, Reanchor: p.Reanchor, DecisionFloor: q.DecisionFloor, Boot: q.Boot, SnapshotJournal: p.SnapshotJournal, IDs: p.IDs}
 	f.current.Clock.PriorWatermark = p.Watermark
 }
 

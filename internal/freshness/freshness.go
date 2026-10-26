@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/relux-works/swarma-owner-registry/internal/journal"
+	"github.com/relux-works/swarma-owner-registry/internal/plan"
 	"github.com/relux-works/swarma-owner-registry/internal/qtime"
 	"github.com/relux-works/waggle/record"
 	"github.com/relux-works/waggle/verifier"
@@ -20,17 +21,44 @@ import (
 // Anchor is exactly the eight-field S4 FreshnessAnchor. Only explicitly
 // authorized genesis has PublicationSeq zero and nil publication ID/time.
 type Anchor struct {
-	RegistryID     string  `json:"registry_id"`
-	Owner          string  `json:"owner"`
-	PublicationSeq int64   `json:"publication_seq"`
-	FreshnessID    *string `json:"freshness_id"`
-	IssuedAt       *string `json:"issued_at"`
-	Snapshot       string  `json:"snapshot"`
-	RegistrySeq    int64   `json:"registry_seq"`
-	CheckpointID   string  `json:"checkpoint_id"`
+	RegistryID              string                     `json:"registry_id"`
+	Owner                   string                     `json:"owner"`
+	PublicationSeq          int64                      `json:"publication_seq"`
+	FreshnessID             *string                    `json:"freshness_id"`
+	IssuedAt                *string                    `json:"issued_at"`
+	Snapshot                string                     `json:"snapshot"`
+	RegistrySeq             int64                      `json:"registry_seq"`
+	CheckpointID            string                     `json:"checkpoint_id"`
+	RegistryCurrencyVersion int                        `json:"registry_currency_version,omitempty"`
+	Snapshots               []verifier.SnapshotBinding `json:"snapshots,omitempty"`
+}
+
+// MarshalJSON preserves every /1 member and its original ordering. Only /2
+// selects the explicit local codec; the verifier Evidence remains its closed shape.
+func (a Anchor) MarshalJSON() ([]byte, error) {
+	type legacy Anchor
+	if a.RegistryCurrencyVersion != 2 {
+		return json.Marshal(legacy(a))
+	}
+	return json.Marshal(struct {
+		RegistryID              string                     `json:"registry_id"`
+		Owner                   string                     `json:"owner"`
+		PublicationSeq          int64                      `json:"publication_seq"`
+		FreshnessID             *string                    `json:"freshness_id"`
+		IssuedAt                *string                    `json:"issued_at"`
+		RegistrySeq             int64                      `json:"registry_seq"`
+		CheckpointID            string                     `json:"checkpoint_id"`
+		RegistryCurrencyVersion int                        `json:"registry_currency_version"`
+		Snapshots               []verifier.SnapshotBinding `json:"snapshots"`
+	}{a.RegistryID, a.Owner, a.PublicationSeq, a.FreshnessID, a.IssuedAt, a.RegistrySeq, a.CheckpointID, 2, a.Snapshots})
 }
 
 func (a Anchor) clone() Anchor {
+	if a.Snapshots != nil {
+		rows := make([]verifier.SnapshotBinding, len(a.Snapshots))
+		copy(rows, a.Snapshots)
+		a.Snapshots = rows
+	}
 	if a.FreshnessID != nil {
 		x := *a.FreshnessID
 		a.FreshnessID = &x
@@ -49,7 +77,17 @@ func (a Anchor) fact() verifier.Evidence {
 	if a.IssuedAt != nil {
 		at = *a.IssuedAt
 	}
-	e, _ := verifier.Present(map[string]any{"registry_id": a.RegistryID, "owner": a.Owner, "publication_seq": a.PublicationSeq, "freshness_id": id, "issued_at": at, "snapshot": a.Snapshot, "registry_seq": a.RegistrySeq, "checkpoint_id": a.CheckpointID})
+	m := map[string]any{"registry_id": a.RegistryID, "owner": a.Owner, "publication_seq": a.PublicationSeq, "freshness_id": id, "issued_at": at, "registry_seq": a.RegistrySeq, "checkpoint_id": a.CheckpointID}
+	if a.RegistryCurrencyVersion == 2 {
+		rows := make([]any, 0, len(a.Snapshots))
+		for _, r := range a.Snapshots {
+			rows = append(rows, map[string]any{"root_role": r.RootRole, "root_key_id": r.RootKeyID, "snapshot_id": r.SnapshotID})
+		}
+		m["snapshots"] = rows
+	} else {
+		m["snapshot"] = a.Snapshot
+	}
+	e, _ := verifier.Present(m)
 	return e
 }
 
@@ -60,14 +98,7 @@ type Outcome struct {
 	Plan verifier.Plan `json:"plan"`
 }
 
-func (r Outcome) clone() Outcome {
-	r.Plan.IDs = append([]string(nil), r.Plan.IDs...)
-	if r.Plan.Reanchor != nil {
-		x := *r.Plan.Reanchor
-		r.Plan.Reanchor = &x
-	}
-	return r
-}
+func (r Outcome) clone() Outcome { r.Plan = plan.Clone(r.Plan); return r }
 
 // Publication archives exact accepted bytes and their original evidence/outcome.
 // Archive membership records admission, never present or historical authority.
@@ -81,6 +112,7 @@ type Publication struct {
 	Outcome    Outcome          `json:"outcome"`
 	Time       qtime.Interval   `json:"time"`
 	Projection qtime.Projection `json:"projection"`
+	Currency   *CurrencyProof   `json:"currency,omitempty"`
 }
 
 func (p Publication) clone() Publication {
@@ -88,6 +120,7 @@ func (p Publication) clone() Publication {
 	p.Checkpoint = bytes.Clone(p.Checkpoint)
 	p.Snapshot = bytes.Clone(p.Snapshot)
 	p.Witness = bytes.Clone(p.Witness)
+	p.Currency = p.Currency.clone()
 	p.Anchor = p.Anchor.clone()
 	p.Outcome = p.Outcome.clone()
 	return p
@@ -96,15 +129,19 @@ func (p Publication) clone() Publication {
 // State retains all publications, including prior heads, without truncation.
 // Its authenticated genesis and watermark are independent of a local counter.
 type State struct {
-	Genesis       Anchor        `json:"genesis"`
-	Anchor        Anchor        `json:"anchor"`
-	History       []Publication `json:"history"`
-	Watermark     string        `json:"watermark"`
-	DecisionFloor string        `json:"decision_floor"`
-	Boot          string        `json:"boot"`
+	Version       int            `json:"version,omitempty"`
+	PinIdentity   string         `json:"pin_identity,omitempty"`
+	Currency      *CurrencyProof `json:"currency,omitempty"`
+	Genesis       Anchor         `json:"genesis"`
+	Anchor        Anchor         `json:"anchor"`
+	History       []Publication  `json:"history"`
+	Watermark     string         `json:"watermark"`
+	DecisionFloor string         `json:"decision_floor"`
+	Boot          string         `json:"boot"`
 }
 
 func (s State) Clone() State {
+	s.Currency = s.Currency.clone()
 	s.Genesis = s.Genesis.clone()
 	s.Anchor = s.Anchor.clone()
 	if s.History != nil {
@@ -124,7 +161,13 @@ func StateID(s State) (string, error) {
 	if e != nil {
 		return "", e
 	}
-	return record.Digest(append([]byte("freshness-state-v1\n"), raw...)), nil
+	prefix := "freshness-state-v1\n"
+	if s.Version == 2 {
+		prefix = "freshness-state-v2\n"
+	} else if s.Version != 0 {
+		return "", unavailable()
+	}
+	return record.Digest(append([]byte(prefix), raw...)), nil
 }
 
 // Recovery is supplied only after an independently qualified complete-history
@@ -157,6 +200,8 @@ type Trust struct {
 	Retained        State
 	Recovery        Recovery
 	Persistence     Persistence
+	// CurrencyRoots is independently protected configuration, not recovered policy.
+	CurrencyRoots map[string]string
 }
 
 // WitnessRead contains already authenticated original evidence and the exact
@@ -179,6 +224,7 @@ type Input struct {
 	Snapshot   journal.SnapshotFacts
 	Witness    WitnessRead
 	IDs, Keys  []string
+	Currency   *CurrencyProof
 }
 
 // Publisher serializes local calls. External serialization/exclusion remains a
@@ -192,6 +238,7 @@ type Publisher struct {
 	state           State
 	stateID         string
 	fenced          bool
+	currencyRoots   map[string]string
 }
 type Error struct{ Code string }
 
@@ -213,7 +260,7 @@ func timestamp(s string) bool {
 	return e == nil && v.Year() >= 1970 && v.Year() <= 9999 && v.Format("2006-01-02T15:04:05Z") == s
 }
 func validAnchor(a Anchor) bool {
-	if a.RegistryID == "" || a.Owner == "" || len(a.Owner) > 255 || !utf8.ValidString(a.Owner) || a.PublicationSeq < 0 || a.PublicationSeq > journal.MaxSequence || a.RegistrySeq < 1 || a.RegistrySeq > journal.MaxSequence || !record.IsContentID(a.Snapshot) || !record.IsContentID(a.CheckpointID) {
+	if a.RegistryID == "" || a.Owner == "" || len(a.Owner) > 255 || !utf8.ValidString(a.Owner) || a.PublicationSeq < 0 || a.PublicationSeq > journal.MaxSequence || a.RegistrySeq < 1 || a.RegistrySeq > journal.MaxSequence || !validSnapshotAnchor(a) || !record.IsContentID(a.CheckpointID) {
 		return false
 	}
 	if a.PublicationSeq == 0 {
@@ -227,6 +274,31 @@ func validAnchor(a Anchor) bool {
 // the externally qualified Recovery contract is mandatory even for intact bytes.
 func New(t Trust) (*Publisher, error) {
 	s := t.Retained
+	if s.Version == 2 {
+		id, e := currencyPinIdentity(t.Registry, t.Owner, t.CurrencyRoots)
+		if e != nil || id != s.PinIdentity || s.Currency == nil {
+			return nil, unavailable()
+		}
+		if _, ok := t.Persistence.(CurrencyPersistence); !ok {
+			return nil, unavailable()
+		}
+		if _, _, e := s.Currency.evidence(); e != nil {
+			return nil, unavailable()
+		}
+		current, e := parse(s.Currency.Originals[s.Anchor.CheckpointID])
+		if e != nil || current["id"] != s.Anchor.CheckpointID {
+			return nil, unavailable()
+		}
+		if !currencyIndexPins(s.Currency.Anchor, t.Registry, t.Owner, t.CurrencyRoots) {
+			return nil, unavailable()
+		}
+		encoded, e := json.Marshal(s)
+		if e != nil || len(encoded) > MaxCurrencyStateBytes {
+			return nil, unavailable()
+		}
+	} else if s.Version != 0 || s.Currency != nil || s.PinIdentity != "" || t.CurrencyRoots != nil || s.Anchor.RegistryCurrencyVersion != 0 {
+		return nil, unavailable()
+	}
 	if absent(t.Signer) || absent(t.Persistence) || record.ValidateKey(t.Registry) != nil || t.Owner == "" || !t.Recovery.Reconciled || !validAnchor(s.Genesis) || !validAnchor(s.Anchor) || s.Genesis.PublicationSeq != 0 || s.Anchor.RegistryID != t.Registry || s.Genesis.RegistryID != t.Registry || s.Anchor.Owner != t.Owner || s.Genesis.Owner != t.Owner || !timestamp(s.Watermark) || !qtime.ValidFloor(s.DecisionFloor) || s.Boot == "" || int64(len(s.History)) != s.Anchor.PublicationSeq {
 		return nil, unavailable()
 	}
@@ -238,7 +310,7 @@ func New(t Trust) (*Publisher, error) {
 		if e != nil || clock != p.Projection || p.Outcome.Plan.Watermark != clock.Now || s.Watermark < clock.Watermark || !qtime.FloorAtLeast(s.DecisionFloor, clock.DecisionFloor) {
 			return nil, unavailable()
 		}
-		if p.Anchor.PublicationSeq != int64(i)+1 || !validAnchor(p.Anchor) || p.Anchor.RegistryID != t.Registry || p.Anchor.Owner != t.Owner || len(p.Bytes) == 0 || len(p.Bytes) > journal.MaxRecordBytes || len(p.Checkpoint) == 0 || len(p.Checkpoint) > journal.MaxRecordBytes || len(p.Snapshot) == 0 || len(p.Snapshot) > journal.MaxRecordBytes || len(p.Witness) == 0 || !timestamp(p.ReadAt) || p.Outcome.Code != "accept" || p.Outcome.Plan.Reanchor != nil {
+		if p.Anchor.PublicationSeq != int64(i)+1 || !validAnchor(p.Anchor) || p.Anchor.RegistryID != t.Registry || p.Anchor.Owner != t.Owner || len(p.Bytes) == 0 || len(p.Bytes) > journal.MaxRecordBytes || len(p.Checkpoint) == 0 || len(p.Checkpoint) > journal.MaxRecordBytes || (len(p.Snapshot) == 0 && p.Currency == nil) || len(p.Snapshot) > journal.MaxRecordBytes || len(p.Witness) == 0 || !timestamp(p.ReadAt) || p.Outcome.Code != "accept" || p.Outcome.Plan.Reanchor != nil {
 			return nil, unavailable()
 		}
 	}
@@ -252,7 +324,11 @@ func New(t Trust) (*Publisher, error) {
 	if e != nil || id != t.Recovery.StateID {
 		return nil, unavailable()
 	}
-	return &Publisher{registry: t.Registry, owner: t.Owner, signer: t.Signer, store: t.Persistence, state: s.Clone(), stateID: id}, nil
+	roots := map[string]string{}
+	for role, k := range t.CurrencyRoots {
+		roots[role] = k
+	}
+	return &Publisher{currencyRoots: roots, registry: t.Registry, owner: t.Owner, signer: t.Signer, store: t.Persistence, state: s.Clone(), stateID: id}, nil
 }
 func (p *Publisher) Fenced() bool {
 	if p == nil {
@@ -316,6 +392,12 @@ func (p *Publisher) publish(in Input, retryOnly bool) ([]byte, Outcome) {
 	defer p.mu.Unlock()
 	if p.fenced {
 		return no("freshness_state_unavailable")
+	}
+	if p.state.Version == 2 {
+		return p.publishCurrency(in, retryOnly)
+	}
+	if in.Currency != nil || in.Context.RegistryCurrencyVersion == 2 {
+		return no("registry_currency_version_mismatch")
 	}
 	if len(in.Snapshot.Bytes) > journal.MaxRecordBytes || len(in.Witness.Original) > journal.MaxRecordBytes {
 		return no("freshness_malformed")
@@ -423,12 +505,12 @@ func (p *Publisher) publish(in Input, retryOnly bool) ([]byte, Outcome) {
 	}
 	b := obj(env["body"])
 	id, issued := text(env["id"]), text(b["issued_at"])
-	a := Anchor{p.registry, p.owner, number(b["publication_seq"]), &id, &issued, text(b["snapshot"]), number(b["registry_seq"]), text(b["checkpoint_id"])}
+	a := Anchor{RegistryID: p.registry, Owner: p.owner, PublicationSeq: number(b["publication_seq"]), FreshnessID: &id, IssuedAt: &issued, Snapshot: text(b["snapshot"]), RegistrySeq: number(b["registry_seq"]), CheckpointID: text(b["checkpoint_id"])}
 	outcome := Outcome{Code: r.Code, Plan: r.Plan}.clone()
 	next := p.state.Clone()
 	next.Anchor = a
 	next.Watermark, next.DecisionFloor, next.Boot = clock.Watermark, clock.DecisionFloor, clock.Boot
-	next.History = append(next.History, Publication{bytes.Clone(raw), bytes.Clone(in.Checkpoint), bytes.Clone(in.Snapshot.Bytes), bytes.Clone(in.Witness.Original), in.Witness.ReadAt, a.clone(), outcome.clone(), in.Time, clock})
+	next.History = append(next.History, Publication{bytes.Clone(raw), bytes.Clone(in.Checkpoint), bytes.Clone(in.Snapshot.Bytes), bytes.Clone(in.Witness.Original), in.Witness.ReadAt, a.clone(), outcome.clone(), in.Time, clock, nil})
 	if !p.commit(next) {
 		return no("freshness_persistence_unavailable")
 	}
@@ -437,6 +519,13 @@ func (p *Publisher) publish(in Input, retryOnly bool) ([]byte, Outcome) {
 }
 
 func (p *Publisher) commit(next State) bool {
+	if next.Version == 2 {
+		encoded, e := json.Marshal(next)
+		if e != nil || len(encoded) > MaxCurrencyStateBytes {
+			p.fenced = true
+			return false
+		}
+	}
 	nextID, e := StateID(next)
 	if e != nil {
 		p.fenced = true

@@ -15,11 +15,12 @@ import (
 // No receipt survives restart. Qualification, clock/witness authentication and
 // actual durable persistence remain the caller's responsibilities.
 type Registry struct {
-	mu           sync.RWMutex
-	config       *pins.Config
-	snapshots    verifier.Evidence
-	snapshotCost int
-	admission    *composition.Admission
+	mu              sync.RWMutex
+	config          *pins.Config
+	snapshots       verifier.Evidence
+	snapshotJournal verifier.Evidence
+	snapshotCost    int
+	admission       *composition.Admission
 }
 
 // NewRegistry starts without receipt authority. Full F and an exact persistence
@@ -33,6 +34,33 @@ func NewRegistry(config *pins.Config, snapshots map[string]Snapshot) (*Registry,
 		return nil, err
 	}
 	return r, nil
+}
+
+// NewCurrencyRegistry selects the protected /2 profile and retains the original
+// complete-prefix Evidence. Qualified anchors and history remain caller inputs;
+// construction alone grants no authority. Full F must authenticate every suffix.
+func NewCurrencyRegistry(config *pins.Config, snapshots map[string]Snapshot, journal verifier.Evidence) (*Registry, error) {
+	c, e := config.VerifierContext()
+	if e != nil || c.RegistryCurrencyVersion != 2 {
+		return nil, refuse(string(VerificationUnavailable))
+	}
+	r, e := NewRegistry(config, snapshots)
+	if e != nil {
+		return nil, e
+	}
+	r.snapshotJournal = journal
+	return r, nil
+}
+
+// ReplaceSnapshotJournal replaces the entire immutable premise, including for
+// equivalent bytes. It never derives authority from a caller's candidate Plan.
+// Every replacement fences the held admission, including replacement back to
+// an earlier Evidence value. Full F is required before use again.
+func (r *Registry) ReplaceSnapshotJournal(journal verifier.Evidence) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.admission = nil
+	r.snapshotJournal = journal
 }
 
 // ReplaceSnapshots is mandatory after ANY snapshot/qualification change,
@@ -83,6 +111,7 @@ func (r *Registry) verify(proof composition.Proof, reanchor bool) (*composition.
 	if err != nil {
 		return nil, verifier.Result{Code: string(VerificationUnavailable)}
 	}
+	ctx.SnapshotJournal = r.snapshotJournal
 	ctx.SignedSnapshots = r.snapshots
 	proof.Context = ctx
 	var a *composition.Admission
@@ -105,6 +134,7 @@ func (r *Registry) protected(ctx verifier.Context) (verifier.Context, error) {
 	if err != nil {
 		return verifier.Context{}, refuse(string(VerificationUnavailable))
 	}
+	ctx.RegistryCurrencyVersion = static.RegistryCurrencyVersion
 	ctx.ServiceRoot, ctx.AgentRevocationRoot = static.ServiceRoot, static.AgentRevocationRoot
 	ctx.CommitSigningKey, ctx.EnrollmentPublisher = static.CommitSigningKey, static.EnrollmentPublisher
 	ctx.GrantRoot, ctx.OperatorRoot = static.GrantRoot, static.OperatorRoot
@@ -127,8 +157,9 @@ type RegistryCurrent struct {
 	Submission                    Snapshot
 }
 
-// Accept admits registry-owner agent attestations or exact new revocation/1
-// submissions. Grants, devices and services retain their existing separate gates.
+// Accept admits registry-owner agents or exact new revocation/1 submissions.
+// Protected /2 additionally admits grants, devices and services with required
+// exact root coverage. Legacy profiles retain their earlier routing gates.
 // It performs no effects and does not update snapshots or mint a receipt.
 func (r *Registry) Accept(kind string, raw []byte, current RegistryCurrent) (*Accepted, error) {
 	r.mu.RLock()
@@ -140,7 +171,11 @@ func (r *Registry) accept(kind string, raw []byte, in RegistryCurrent) (*Accepte
 	if len(raw) > MaxIdentityBytes {
 		return nil, refuse(string(RequestTooLarge))
 	}
-	if kind != "attestation/1" && kind != "revocation/1" {
+	if kind != "attestation/1" && kind != "revocation/1" && kind != "grant/1" {
+		return nil, refuse(string(RecordTypeUnsupported))
+	}
+	staticPolicy, _ := r.config.VerifierContext()
+	if kind == "grant/1" && staticPolicy.RegistryCurrencyVersion != 2 {
 		return nil, refuse(string(RecordTypeUnsupported))
 	}
 	value, err := record.Parse(raw, MaxIdentityBytes, 16)
@@ -159,7 +194,11 @@ func (r *Registry) accept(kind string, raw []byte, in RegistryCurrent) (*Accepte
 	if !ok {
 		return nil, refuse(string(RequestInvalid))
 	}
-	if kind == "attestation/1" && body["key_class"] != "agent" {
+	static, _ := r.config.VerifierContext()
+	if static.RegistryCurrencyVersion != 2 && (kind == "grant/1" || (kind == "attestation/1" && body["key_class"] != "agent")) {
+		if kind == "grant/1" {
+			return nil, refuse(string(RecordTypeUnsupported))
+		}
 		return nil, refuse(string(KeyClassUnsupported))
 	}
 	if in.Facts.Snapshots != nil {
@@ -178,6 +217,7 @@ func (r *Registry) accept(kind string, raw []byte, in RegistryCurrent) (*Accepte
 	if err = in.Facts.fill(&ctx); err != nil {
 		return nil, err
 	}
+	ctx.SnapshotJournal = r.snapshotJournal
 	ctx.SignedSnapshots = r.snapshots // identity retained, never Present per admission
 	ctx.JournalWitness, ctx.WitnessReadAt = in.JournalWitness, in.WitnessReadAt
 	service, _ := r.config.Pin(pins.GrantService)
@@ -196,20 +236,56 @@ func (r *Registry) accept(kind string, raw []byte, in RegistryCurrent) (*Accepte
 			return nil, refuse("key_binding_unavailable")
 		}
 	} else {
-		ctx.Attestations, err = withRecord(in.Facts.Attestations, id, raw)
-		if err != nil {
-			return nil, err
-		}
-		consumer, e := composition.NewRequired(composition.Use{Context: ctx, Clock: in.Clock, Admission: r.admission, Persisted: in.Persisted})
-		if e != nil {
-			return nil, upstream(e)
-		}
-		subject, _ := body["subject"].(map[string]any)
-		key, _ := subject["key_id"].(string)
-		if _, e = consumer.VerifyAttestation(key, id, false); e != nil {
-			return nil, upstream(e)
+		if kind == "attestation/1" {
+			subject, _ := body["subject"].(map[string]any)
+			key, _ := subject["key_id"].(string)
+			class, _ := body["key_class"].(string)
+			switch class {
+			case "agent":
+				ctx.Attestations, err = withRecord(in.Facts.Attestations, id, raw)
+			case "operator-device":
+				ctx.DeviceAttestations, err = withRecord(in.Facts.Devices, key, raw)
+			case "service":
+				ctx.ServiceAttestations, err = serviceRecords(in.Facts.Services, service.Key, key, raw)
+			default:
+				return nil, refuse(string(KeyClassUnsupported))
+			}
+			if err != nil {
+				return nil, err
+			}
+			consumer, e := composition.NewRequired(composition.Use{Context: ctx, Clock: in.Clock, Admission: r.admission, Persisted: in.Persisted})
+			if e != nil {
+				return nil, upstream(e)
+			}
+			if class == "service" {
+				_, err = consumer.VerifyServiceAttestation(key)
+			} else {
+				_, err = consumer.VerifyAttestation(key, id, class == "operator-device")
+			}
+			if err != nil {
+				return nil, upstream(err)
+			}
+		} else {
+			request, e := verifier.Present(in.Facts.Request)
+			if e != nil || in.Facts.Request == nil {
+				return nil, refuse(string(VerificationUnavailable))
+			}
+			chain := make([][]byte, 0, len(in.Facts.Parents)+1)
+			chain = append(chain, raw)
+			chain = append(chain, in.Facts.Parents...)
+			consumer, e := composition.NewRequired(composition.Use{Context: ctx, Clock: in.Clock, Admission: r.admission, Persisted: in.Persisted})
+			if e != nil {
+				return nil, upstream(e)
+			}
+			result := consumer.Authorize(chain, request)
+			if result.Code != "accept" {
+				return nil, refuse(result.Code)
+			}
+			pin, _ := r.config.Pin(pins.GrantRoot)
+			issuer = pin.Key
 		}
 	}
+
 	if err = in.Facts.conflict(id, raw); err != nil {
 		return nil, err
 	}

@@ -22,13 +22,14 @@ type SignatureService interface {
 type ownerSigner struct {
 	registry, owner string
 	service         SignatureService
+	currencyRoots   map[string]string
 }
 
 func NewSigner(registry, owner string, service SignatureService) (Signer, error) {
 	if !key(registry) || record.ValidateKey(registry) != nil || !validText(owner) || service == nil {
 		return nil, fail(SignerUnavailable)
 	}
-	return &ownerSigner{registry, owner, service}, nil
+	return &ownerSigner{registry: registry, owner: owner, service: service}, nil
 }
 func revocationBody(b map[string]any, registry string) bool {
 	if !shape(b, "type issuer issued_at complete entries") || b["issuer"] != registry || !timestamp(b["issued_at"]) || b["complete"] != true {
@@ -67,12 +68,17 @@ func (s *ownerSigner) Sign(raw []byte) ([]byte, error) {
 	}
 	kind := text(b["type"])
 	switch kind {
-	case "revocation/1", "checkpoint/1", "freshness/1":
+	case "revocation/1", "checkpoint/1", "freshness/1", "checkpoint/2", "freshness/2":
 	default:
+		return nil, fail(ProfileRefused)
+	}
+	if s.currencyRoots != nil && (kind == "checkpoint/1" || kind == "freshness/1") {
 		return nil, fail(ProfileRefused)
 	}
 	valid := false
 	switch kind {
+	case "checkpoint/2", "freshness/2":
+		valid = s.currencyRoots != nil && currencyBody(b, s.currencyRoots) && b["registry"] == s.registry && b["owner"] == s.owner
 	case "revocation/1":
 		valid = revocationBody(b, s.registry)
 	case "checkpoint/1":

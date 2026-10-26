@@ -1,10 +1,13 @@
-// Package composition connects full freshness admission to process-local S5
+// Package composition connects full freshness admission to process-local /1 and /2
 // consumers after a caller acknowledges persistence. It performs no I/O, clock
 // collection, durability, witness authentication or intake activation.
 package composition
 
 import (
 	"encoding/json"
+	"reflect"
+
+	"github.com/relux-works/swarma-owner-registry/internal/plan"
 
 	"github.com/relux-works/swarma-owner-registry/internal/qtime"
 	"github.com/relux-works/waggle/record"
@@ -39,10 +42,30 @@ type Anchor struct {
 	FreshnessID, IssuedAt, Snapshot string
 	RegistrySeq                     int64
 	CheckpointID                    string
+	RegistryCurrencyVersion         int                        `json:"registry_currency_version,omitempty"`
+	Snapshots                       []verifier.SnapshotBinding `json:"snapshots,omitempty"`
 }
 
+func (a Anchor) clone() Anchor {
+	if a.Snapshots != nil {
+		rows := make([]verifier.SnapshotBinding, len(a.Snapshots))
+		copy(rows, a.Snapshots)
+		a.Snapshots = rows
+	}
+	return a
+}
 func (a Anchor) evidence() verifier.Evidence {
-	e, _ := verifier.Present(map[string]any{"registry_id": a.RegistryID, "owner": a.Owner, "publication_seq": a.PublicationSeq, "freshness_id": a.FreshnessID, "issued_at": a.IssuedAt, "snapshot": a.Snapshot, "registry_seq": a.RegistrySeq, "checkpoint_id": a.CheckpointID})
+	m := map[string]any{"registry_id": a.RegistryID, "owner": a.Owner, "publication_seq": a.PublicationSeq, "freshness_id": a.FreshnessID, "issued_at": a.IssuedAt, "registry_seq": a.RegistrySeq, "checkpoint_id": a.CheckpointID}
+	if a.RegistryCurrencyVersion == 2 {
+		var rows []any
+		for _, r := range a.Snapshots {
+			rows = append(rows, map[string]any{"root_role": r.RootRole, "root_key_id": r.RootKeyID, "snapshot_id": r.SnapshotID})
+		}
+		m["snapshots"] = rows
+	} else {
+		m["snapshot"] = a.Snapshot
+	}
+	e, _ := verifier.Present(m)
 	return e
 }
 
@@ -55,6 +78,9 @@ type PersistenceAcknowledgement struct {
 	Watermark           string
 	Reanchor            *verifier.FreshnessReanchorPlan
 	DecisionFloor, Boot string
+	// In /2 the same atomic commitment also covers the complete derived index and inventory.
+	SnapshotJournal *verifier.SnapshotJournalState `json:"snapshot_journal,omitempty"`
+	IDs             []string                       `json:"ids,omitempty"`
 }
 
 // Admission retains the original pointer and whole immutable Evidence premise.
@@ -79,7 +105,7 @@ func (a *Admission) Anchor() Anchor {
 	if a == nil {
 		return Anchor{}
 	}
-	return a.anchor
+	return a.anchor.clone()
 }
 func (a *Admission) Projection() qtime.Projection {
 	if a == nil {
@@ -124,38 +150,31 @@ func admitted(in Proof, ctx verifier.Context, p qtime.Projection, r verifier.Res
 	var tip struct {
 		ID   string `json:"id"`
 		Body struct {
-			Registry       string `json:"registry"`
-			Owner          string `json:"owner"`
-			PublicationSeq int64  `json:"publication_seq"`
-			IssuedAt       string `json:"issued_at"`
-			Snapshot       string `json:"snapshot"`
-			RegistrySeq    int64  `json:"registry_seq"`
-			CheckpointID   string `json:"checkpoint_id"`
+			Registry       string                     `json:"registry"`
+			Owner          string                     `json:"owner"`
+			PublicationSeq int64                      `json:"publication_seq"`
+			IssuedAt       string                     `json:"issued_at"`
+			Snapshot       string                     `json:"snapshot"`
+			RegistrySeq    int64                      `json:"registry_seq"`
+			CheckpointID   string                     `json:"checkpoint_id"`
+			Type           string                     `json:"type"`
+			Snapshots      []verifier.SnapshotBinding `json:"snapshots"`
 		} `json:"body"`
 	}
 	if len(in.Chain) == 0 || json.Unmarshal(in.Chain[len(in.Chain)-1], &tip) != nil || r.FreshnessReceipt == nil {
 		return nil, verifier.Result{Code: "freshness_malformed"}
 	}
 	b := tip.Body
-	a := &Admission{receipt: r.FreshnessReceipt, snapshots: ctx.SignedSnapshots, plan: clonePlan(r.Plan), projection: p, anchor: Anchor{b.Registry, b.Owner, b.PublicationSeq, tip.ID, b.IssuedAt, b.Snapshot, b.RegistrySeq, b.CheckpointID}}
+	a := &Admission{receipt: r.FreshnessReceipt, snapshots: ctx.SignedSnapshots, plan: clonePlan(r.Plan), projection: p, anchor: Anchor{RegistryID: b.Registry, Owner: b.Owner, PublicationSeq: b.PublicationSeq, FreshnessID: tip.ID, IssuedAt: b.IssuedAt, Snapshot: b.Snapshot, RegistrySeq: b.RegistrySeq, CheckpointID: b.CheckpointID, Snapshots: b.Snapshots}}
+	if b.Type == "freshness/2" {
+		a.anchor.RegistryCurrencyVersion = 2
+	}
 	return a, r
 }
 
-func clonePlan(p verifier.Plan) verifier.Plan {
-	p.IDs = append([]string(nil), p.IDs...)
-	if p.Reanchor != nil {
-		v := *p.Reanchor
-		p.Reanchor = &v
-	}
-	return p
-}
-func sameAudit(a, b *verifier.FreshnessReanchorPlan) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return *a == *b
-}
-func refusal(code string) error { return &record.Error{Code: code} }
+func clonePlan(p verifier.Plan) verifier.Plan             { return plan.Clone(p) }
+func sameAudit(a, b *verifier.FreshnessReanchorPlan) bool { return reflect.DeepEqual(a, b) }
+func refusal(code string) error                           { return &record.Error{Code: code} }
 
 // project replaces all point-time inputs with one conservative projection. An
 // invalid interval leaves time unavailable, allowing the library's earlier wire
@@ -175,7 +194,9 @@ func project(ctx verifier.Context, clock Clock) (verifier.Context, qtime.Project
 	return ctx, p
 }
 
-// Use supplies current protected facts and genuine time. Context.SignedSnapshots
+// Use supplies current protected facts and genuine time. Both whole Evidence
+// identities, SignedSnapshots and (in /2) SnapshotJournal, must stay unchanged.
+// Context.SignedSnapshots
 // must be the same entire Evidence supplied to F, including all other rows and
 // qualification premises. New retains that Evidence without Present/rebuilding.
 // The current authenticated JournalWitness/read remain caller inputs.
@@ -217,7 +238,10 @@ func New(in Use) (*Consumer, error) {
 		if ack == nil {
 			return nil, refusal("freshness_receipt_unavailable")
 		}
-		if ack.Anchor != a.anchor || ack.Watermark != a.plan.Watermark || !sameAudit(ack.Reanchor, a.plan.Reanchor) || ack.DecisionFloor != a.projection.DecisionFloor || ack.Boot != a.projection.Boot {
+		if !reflect.DeepEqual(ack.Anchor, a.anchor) || ack.Watermark != a.plan.Watermark || !sameAudit(ack.Reanchor, a.plan.Reanchor) || ack.DecisionFloor != a.projection.DecisionFloor || ack.Boot != a.projection.Boot {
+			return nil, refusal("freshness_receipt_binding_mismatch")
+		}
+		if a.anchor.RegistryCurrencyVersion == 2 && (!reflect.DeepEqual(ack.SnapshotJournal, a.plan.SnapshotJournal) || !reflect.DeepEqual(ack.IDs, a.plan.IDs)) {
 			return nil, refusal("freshness_receipt_binding_mismatch")
 		}
 		if ctx.FreshnessReceipt != nil && ctx.FreshnessReceipt != a.receipt {

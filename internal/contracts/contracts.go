@@ -1,12 +1,25 @@
-// Package contracts freezes the reviewed S5 service surface, not runtime admission.
+// Package contracts freezes the reviewed S8 dependency and explicit publication profiles, not runtime admission.
 package contracts
 
-const Revision = "5f4e7435d75697385ff6ce15a7501ac6f31c8ea5"
+const Revision = "b63d627b19c4178d34b7cff58f8f6068efeca1a0"
+
+// CurrencyVersion is an explicit protected selection, never wire negotiation.
+const CurrencyVersion = 2
+const CurrencyCheckpoint = "checkpoint/2"
+const CurrencyFreshness = "freshness/2"
 
 // RecordTypes returns a copy of the service's closed record types. Message/act
 // intake and registry-internal freshness publication are outside this list.
-func RecordTypes() []string {
-	return []string{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}
+func RecordTypes() []string { return RecordTypesForCurrency(1) }
+
+// RecordTypesForCurrency preserves /1 and selects /2 only for protected version2.
+// Internal freshness publication is not a received intake profile.
+func RecordTypesForCurrency(version int) []string {
+	checkpoint := "checkpoint/1"
+	if version == CurrencyVersion {
+		checkpoint = CurrencyCheckpoint
+	}
+	return []string{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", checkpoint}
 }
 
 func KeyClasses() []string { return []string{"agent", "operator-device", "service"} }

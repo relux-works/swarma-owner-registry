@@ -24,7 +24,7 @@ import (
 
 const (
 	modulePath    = "github.com/relux-works/waggle"
-	moduleVersion = "v0.0.0-20261025015329-5f4e7435d756"
+	moduleVersion = "v0.0.0-20261026034605-b63d627b19c4"
 )
 
 type fixtureModule struct {
@@ -156,6 +156,10 @@ func load(t *testing.T, name string) sample {
 		t.Fatal(e)
 	}
 	v := parse(t, raw)
+	return sampleFrom(t, v)
+}
+func sampleFrom(t *testing.T, v map[string]any) sample {
+	t.Helper()
 	f := object(v["fixture"])
 	s := sample{kind: "grant/1"}
 	fs := &s.facts
@@ -199,6 +203,9 @@ func load(t *testing.T, name string) sample {
 		keys[pins.GrantService] = k
 		break
 	}
+	if keys[pins.GrantService] == "" {
+		keys[pins.GrantService], _ = publicKey(72)
+	}
 	roles := map[string]any{}
 	purposes := map[pins.Role]string{pins.RegistryOwner: "registry-revocation", pins.CommitSigner: "git-commit", pins.EnrollmentPublisher: "enrollment/1", pins.Purpose5Root: "purpose-5", pins.OperatorRoot: "operator", pins.GrantRoot: "grant", pins.GrantService: "grant-service"}
 	for r, k := range keys {
@@ -211,7 +218,7 @@ func load(t *testing.T, name string) sample {
 		}
 		roles[string(r)] = map[string]any{"key": k, "purpose": purposes[r], "scope": scope}
 	}
-	s.document = map[string]any{"revision": "5f4e7435d75697385ff6ce15a7501ac6f31c8ea5", "owner": "owner-a", "object_format": "sha1", "roles": roles, "record_types": []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}, "key_classes": []any{"agent", "operator-device", "service"}, "service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)}}
+	s.document = map[string]any{"revision": "b63d627b19c4178d34b7cff58f8f6068efeca1a0", "owner": "owner-a", "object_format": "sha1", "roles": roles, "record_types": []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"}, "key_classes": []any{"agent", "operator-device", "service"}, "service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)}}
 	s.config = config(t, s.document)
 	return s
 }

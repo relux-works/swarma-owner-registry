@@ -41,7 +41,7 @@ func validDocument() map[string]any {
 		roles[string(role)] = map[string]any{"key": testKey(byte(i + 1)), "purpose": purposes[i], "scope": scope}
 	}
 	return map[string]any{
-		"revision": "5f4e7435d75697385ff6ce15a7501ac6f31c8ea5", "owner": "owner-a", "object_format": "sha1", "roles": roles,
+		"revision": "b63d627b19c4178d34b7cff58f8f6068efeca1a0", "owner": "owner-a", "object_format": "sha1", "roles": roles,
 		"record_types":    []any{"attestation/1", "grant/1", "revocation/1", "enrollment/1", "journal-entry/1", "checkpoint/1"},
 		"key_classes":     []any{"agent", "operator-device", "service"},
 		"service_profile": map[string]any{"key_class": "service", "purpose": "grant-service", "roles": []any{"author"}, "actions": []any{"grant.sign"}, "max_lifetime_seconds": int64(86400)},
@@ -381,14 +381,14 @@ func TestS3PinCannotAdmitFreshness(t *testing.T) {
 	d := validDocument()
 	d["revision"] = "9b42338b8a57d12a21da4db4375b269deacdd6bf"
 	refused(t, wire(t, d), pins.RevisionUnsupported)
-	d["revision"] = "5f4e7435d75697385ff6ce15a7501ac6f31c8ea5"
+	d["revision"] = "b63d627b19c4178d34b7cff58f8f6068efeca1a0"
 	accepted(t, d)
 }
 
 // The original S4 profile test retains the same service surface at the current pin; explicit booleans open only the selected S4 dependency.
 func TestPinnedS4ProfileAccepted(t *testing.T) {
 	d := validDocument()
-	d["revision"] = "5f4e7435d75697385ff6ce15a7501ac6f31c8ea5"
+	d["revision"] = "b63d627b19c4178d34b7cff58f8f6068efeca1a0"
 	c := accepted(t, d)
 	for _, g := range pins.Gates() {
 		if c.IsOpen(g) {

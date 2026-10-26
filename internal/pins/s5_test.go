@@ -7,22 +7,22 @@ import (
 	"github.com/relux-works/swarma-owner-registry/internal/pins"
 )
 
-const s5Revision = "5f4e7435d75697385ff6ce15a7501ac6f31c8ea5"
+const legacyProfileRevision = "b63d627b19c4178d34b7cff58f8f6068efeca1a0"
 
-// The old S4 policy is refused with no config; the complete S5 control is accepted.
+// The old S4 source pin is refused; the complete legacy profile at S8 is accepted.
 func TestS4PinRefusedAfterS5(t *testing.T) {
 	d := validDocument()
 	d["revision"] = "f76a400ebeb599b95a9bf9b2c59b522bef0392d8"
 	refused(t, wire(t, d), pins.RevisionUnsupported)
-	d["revision"] = s5Revision
+	d["revision"] = legacyProfileRevision
 	accepted(t, d)
 }
 
-// S5 retains closed defaults and static-only Context; explicit booleans affect
+// The S8 pin preserves S5 legacy defaults and static-only Context; booleans affect
 // exactly one declared gate. Unknown receipt gates and non-booleans cannot open it.
 func TestPinnedS5ProfileAccepted(t *testing.T) {
 	d := validDocument()
-	d["revision"] = s5Revision
+	d["revision"] = legacyProfileRevision
 	c := accepted(t, d)
 	for _, gate := range pins.Gates() {
 		if c.IsOpen(gate) {

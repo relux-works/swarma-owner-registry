@@ -80,7 +80,7 @@ func load(t *testing.T, name string) map[string]any {
 			module.err = e
 			return
 		}
-		if m.Path != "github.com/relux-works/waggle" || m.Version != "v0.0.0-20261025015329-5f4e7435d756" || m.Dir == "" || m.Replace != nil {
+		if m.Path != "github.com/relux-works/waggle" || m.Version != "v0.0.0-20261026034605-b63d627b19c4" || m.Dir == "" || m.Replace != nil {
 			module.err = errors.New("unreviewed fixture module")
 			return
 		}
@@ -126,6 +126,21 @@ func proof(t *testing.T, name string) (verifier.Context, [][]byte, []byte, map[s
 		snapshots[root] = copy
 	}
 	c.SignedSnapshots = fact(t, snapshots)
+	if version, ok := v["registry_currency_version"].(int64); ok {
+		c.RegistryCurrencyVersion = int(version)
+		seen := map[string]any{}
+		for id, b := range object(v["seen"]) {
+			seen[id] = decode(t, b)
+		}
+		c.IDJournal = fact(t, seen)
+		c.IDJournalAvailable = fact(t, v["id_journal_available"])
+		j := object(v["snapshot_journal"])
+		entries := make([]any, 0)
+		for _, b := range j["entries"].([]any) {
+			entries = append(entries, decode(t, b))
+		}
+		c.SnapshotJournal = fact(t, map[string]any{"anchor": j["anchor"], "entries": entries})
+	}
 	in := object(d["input"])
 	var chain [][]byte
 	for _, x := range in["chain"].([]any) {

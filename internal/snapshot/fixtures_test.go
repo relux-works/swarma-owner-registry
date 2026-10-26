@@ -46,7 +46,7 @@ func fixtureDir(t *testing.T) string {
 			moduleLocation.err = e
 			return
 		}
-		if m.Path != "github.com/relux-works/waggle" || m.Version != "v0.0.0-20261025015329-5f4e7435d756" || m.Dir == "" || m.Replace != nil {
+		if m.Path != "github.com/relux-works/waggle" || m.Version != "v0.0.0-20261026034605-b63d627b19c4" || m.Dir == "" || m.Replace != nil {
 			moduleLocation.err = errors.New("fixture module differs from pinned identity")
 			return
 		}
