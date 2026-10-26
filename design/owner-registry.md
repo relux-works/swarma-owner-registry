@@ -1772,6 +1772,13 @@ recommendations without reopening accepted S4 decisions. Activation is separate.
 | Q19: QT-2c durable endpoint timing | Durable act plus use, one post-admission suspend-aware read, original <=5-second-or-stricter D and same-process keyless trust are settled requirements. Open with platform and storage owners: actual enforced f or deadline-honoring act for each C/V/F workload, finite T/epsilon/reserve qualification, final common exclusion/order and emergency-stop independence. Unknown bounds keep all windows handoff_unqualified. |
 | Q20: QT-2c provider/template and native parity | Open jointly with broker/platform owners: protected original reader and independent witness contracts, profile/identity codec and frozen-artifact signing staging, original deadline/rate mapping, Linux and mandatory macOS clock/boot representation, native full-flush/rename durability and instance/restore fencing. A template must map the required fields without widening closed wire codecs; no accepting implementation is authorized by this design. |
 | Q21: per-request head-check envelope / WC1 | Open with the owner and WC1: which retained record heads and current-control state must be checked on each request, with what finite stream-count/exchange bound and proof of equivalent rollback protection? S3 checks every populated stream plus current control, so cost grows with S ([WC1 preflight:71–134](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/service/barrier.go#L71-L134)). Under §9.1.1 assumptions p=2, 5ms on every link and 1.600s non-network work, S=41 yields N=227 and 5.005s, already beyond the original five-second ceiling; an assumed S=201 yields 17.005s. These are derived unmeasured examples, not observed consumer inventories or latency. Placement alone does not bound the envelope. Do not omit heads, batch checks or weaken fresh/control coverage without an accepted protocol and qualification; the gate stays closed ([budget model](#911-admission-original-time-and-per-window-budgets), [WC1 G20:28](https://github.com/relux-works/swarma-witness/blob/29df43b7e8b26d1bce7101c5fc73e8c9b8050b99/UNRESOLVED_QUESTIONS.md#L28)). |
+| Q22: owner-activation domain and purpose | Open: Proposed §12 domain `swarma-owner activation/1`, profile `owner-activation/1` and Ed25519 external root signature require complete domain/profile and verifier review. Purpose 7 is free in Keymaker but not reserved. Keymaker never derives, imports, holds or signs with the activation key; no Keymaker purpose is required unless a later registry-wide allocation decides otherwise. No purpose/path/API is allocated. Signing stays closed. See [§12](#12-owner-root-activation-record-activation1). |
+| Q23: owner activation root and pins | Open: Select the actual external owner-activation root identity, algorithm/profile acceptance, protected owner/audience/receiver role pins, historical authorization, rotation/lost-key continuity and revocation. The activation key is distinct from the operator-root key and every other excluded role; no existing registry/device/station/service root is an alias or gains this role. Same-key cross-role reuse must refuse. No key or pin is selected; signing stays closed. See [§12](#12-owner-root-activation-record-activation1). |
+| Q24: activation reference closure and limits | Open: Jointly publish the complete native qualified tuple and accepted artifact/review/intent/occurrence mappings through the existing qualification, policy, list/marker and phased cutover records. Both role UID/generation references and the explicit protected caller-to-worker mapping must be published; current broker identity/property/row coverage is insufficient. Set finite record/reference/identifier limits and canonical identifier mapping; no parallel tuple/cutover schema or opaque fallback. No body may be instantiated while these are missing. See [§12](#12-owner-root-activation-record-activation1). |
+| Q25: activation validity time | Open: Select and qualify the authoritative UTC/elapsed/boot/continuity source, conservative whole-second conversion, finite start/end and original component deadline intersections. No guessed TTL, wall-clock fallback or renewed occurrence; unknown time closes forward authority. See [§12](#12-owner-root-activation-record-activation1). |
+| Q26: activation withdrawal/currentness | Open: Publish explicit owner withdrawal and authoritative invalidation transport, detection/acknowledgment/retention and independent restore floors. Where registry root-state publication is used, retain Q17 D42(a) format/pin, publisher and consumer gates; otherwise qualify the external authority/transport. Planned expiry/removal closes NEW starts through the dispatcher-owned or protected start gate, with retained closure evidence and the earliest original stop bound; material continues under broker policy until worker stop. No new-lease interceptor, admission closure or immediate policy replacement is required for that case. Keep original lease lifetime, policy-generation invalidation, release and token debt separate. Genuine security revocation remains closed: the operator manually stops the worker and replaces broker policy, with an explicit detection-to-policy-replacement-commit issuance window, not a fence. A first-run canary claims no execution-isolation security-revocation conformance. See [§12](#12-owner-root-activation-record-activation1). |
+| Q27: activation replay ownership | Open: Assign the authoritative replay/consumption store owner and cross-consumer reservation/commit/outcome/recovery protocol. Preserve immutable original intent/body/occurrence, external restore/clone floors and G18 exclusion without replenishing worker-lineage start debit. No atomic cross-service commit or automatic missing-state genesis is claimed. See [§12](#12-owner-root-activation-record-activation1). |
+| Q28: activation consumer intake and outcomes | Open: Publish the actual activation-record verifier and its protected intake: dispatcher or protected operator installation path. Publish the authenticated accepted-state projection into the receiver-owned start gate; user-manager/launcher only authenticate its publisher and enforce their existing interlock, never activation signatures or owner intent. Keymaker signs only its protected dispatcher-request scope, not activation; broker v0 retains own policy/lease checks. Neither gains an owner-intent input. Retain original outcomes, currentness/custody, selected committed-start and native qualification gates. No blanket record-verification list or new downstream member/method is authorized. See [§12](#12-owner-root-activation-record-activation1). |
 
 ## 11. Implementation slices and evidence plan
 
@@ -1869,3 +1876,385 @@ not claims that documentation inspection executed or qualified those paths.
 Content-review acceptance of this design precedes code. Later implementation evidence
 must distinguish unit coverage, negative controls, crash/ACL qualification and
 consumer activation; existing services and paused formats remain separate work.
+
+## 12. Owner-root activation record (activation/1)
+
+Status: **inactive design proposal**. Nothing is signed, installed, qualified or
+activated by this section. It proposes the missing owner authorization for one
+trusted, nonfederated Linux worker and one physical launch with owned-run cancel.
+It grants no delegation, account creation/recreation, automatic restart, general
+deployment or macOS activation. Accepted component evidence and exact-content
+owner approval remain prerequisites, not consequences of a signature
+([dispatcher scope][activation-dispatch-scope],
+[qualification remains unavailable][activation-broker-status]).
+
+### 12.1 Signing authority, domain and canonical bytes
+
+Only the owner's **external protected root**, explicitly pinned for the
+owner-activation role, may authorize this profile through the owner's isolated
+closed-profile Signer path. That path must construct and validate this exact
+profile; it cannot expose arbitrary-preimage signing. It is not the online
+registry-owner Signer from Q3. The activation key is distinct from the operator
+root key, not an alias for that role. Neither that operator root, the device
+operator-act key, purpose-5 certification root, grant-service subject nor station
+purpose-6 key can substitute.
+No existing root gains this new role implicitly; the actual root identity,
+algorithm/profile acceptance, pins and historical pin transitions remain Q23
+([existing root separation and Signer limits][activation-roles],
+[device operator verification][activation-device],
+[station-caller exclusions][activation-station]).
+
+Propose the distinct ASCII domain **`swarma-owner activation/1`**, with the
+closed signing profile **`owner-activation/1`**. Purpose **7** is free in the
+Keymaker inventory but is not reserved for this external root. Keymaker never
+derives, imports, holds or signs with the activation key. No Keymaker purpose is
+required unless a later registry-wide allocation decides otherwise. Q22 retains
+complete purpose/domain inventory and consumer review; no derivation path, native
+method, key provisioning or purpose-7 capability is allocated here. Existing
+purposes 1–5 and the proposed station purpose 6 retain their own roles. The new
+literal prefix differs from registration/enrollment, revocation/checkpoint/
+freshness/attestation, broker grant, dispatcher request and witness/custody
+profiles; root-role pinning is an additional boundary, not replaced by the prefix.
+No profile alias or cross-domain signature reuse is permitted
+([purpose inventory][activation-purpose],
+[station purpose and profiles][activation-station],
+[dispatcher preimage][activation-dispatch-bytes],
+[broker grant preimage][activation-broker-grant],
+[registry root profiles][activation-roles]).
+
+Use registrar CCJ-1 and its body-envelope construction, not native socket JSON
+or the device operator-act envelope. The proposed root signature algorithm is
+Ed25519, subject to Q22/Q23 acceptance; P-256 device signatures cannot be used as
+an automatic substitute. The envelope has exactly `body`, `id`, `sig`:
+
+```text
+preimage = ASCII("swarma-owner activation/1") || 0x0a || CCJ-1(body)
+id       = "sha256:" || lowercase_hex(SHA-256(preimage))
+sig      = canonical_base64url_no_pad(Ed25519_signature(preimage))
+```
+
+There is no final LF, recursive member stripping, hash-instead-of-body signing,
+transport frame or caller-selected domain. Neither id nor sig enters the body
+preimage; `intent_id` below is a separate original-operation identifier. Reuse
+CCJ-1's precise UTF-8, duplicate/escaped-alias rejection, closed nested objects,
+integer-only safe range, depth limit, scalar key ordering, escapes and lack of
+Unicode normalization. Reuse strict public-key/signature and canonical base64url
+checks beyond shape validation. These are proposed bytes for this profile, not
+an assertion that current registrar or Keymaker APIs accept the new domain.
+Finite record/reference/identifier limits must be published under Q24; absent
+limits or an incomplete nested grammar close parsing/signing, rather than
+borrowing a transport cap ([CCJ-1 and envelope rules][activation-ccj],
+[external-domain API boundary][activation-dispatch-bytes]).
+
+### 12.2 Closed body and existing-record references
+
+The proposed body has exactly **`v`, `kind`, `scope`, `artifacts`,
+`qualified_tuple`, `validity`, `intent_id`**. All are required; no extensions,
+optional wildcard, inline artifact body, private path or discovery URL is allowed.
+`Digest` below is exactly 64 lowercase hex digits identifying SHA-256 of the
+complete retained existing artifact bytes. Resolve it under that artifact owner's
+protected source and typed verifier; do not reserialize the artifact using this
+profile, replace its owner-defined ID, or treat digest equality as authority.
+These are references to existing records, not replacement record formats
+([broker record identity][activation-broker-record],
+[broker publication validation][activation-broker-publication],
+[dispatcher typed-reference boundary][activation-dispatch-forms]).
+
+| Member | Proposed closed type and required meaning |
+| --- | --- |
+| `v` | Integer exactly `1`. |
+| `kind` | String exactly `"activation/1"`; no operation branch or implicit withdrawal command. |
+| `scope` | Exactly `{audience,policy}`. `audience` is the exact protected installation audience string. `policy` is the Digest of the operator-controlled dispatcher policy defining the intended receiver, purpose-6 caller association and caller UID/generation, separately pinned executor worker UID/generation, explicit protected caller-to-worker mapping, plan pins, one-start scope and owned cancel. Never copy that policy into this body or infer audience/receiver from a hostname. Every consumer must match its protected intended role/receiver in that same scope ([dispatcher policy][activation-dispatch-forms], [two-role requirement][activation-two-roles], [protected audience][activation-device]). |
+| `artifacts` | Exactly `{qualified_list,activation,policy,cutover}`, each a Digest. They reference the broker's complete `qualified-list/1`, existing `qualification-activation/1` marker, complete protected broker static configuration/policy, and the operator's durable phased cutover record, respectively. This `policy` is the broker configuration, distinct from `scope.policy`. Preserve all source/build/binary/schema/configuration/plan/catalog/profile/adapter/review and qualification evidence through those owners' accepted reference closures; no convenient version-only projection or research-head-for-installed-binary substitution ([broker policy][activation-broker-policy], [list/marker][activation-broker-marker], [cutover][activation-cutover]). |
+| `qualified_tuple` | Digest of the complete existing `qualification/1` record selected by the referenced whole qualified list. Its identity, case/approval/artifact closure and current observations must cover the exact native installed tuple, including the purpose-6 caller and executor worker as distinct roles with their own UID/generation references and the protected mapping reference, every other cross-service identity/generation, OS/kernel/architecture/boot, service-manager/property/build/exec profile, routing/account/receiver/key/epoch and custody/time/backend/exclusion fact needed by the selected scope. It is not a new tuple/manifest schema ([record][activation-broker-record], [current observer limits][activation-broker-observers], [consumer native tuple][activation-dispatch-gates], [two-role retention][activation-bootstrap]). |
+| `validity` | Exactly `{occurrence,start,end}`. `occurrence` is the retained original authorization occurrence identifier, an exact nonempty string; it is not allocated afresh on retry. `start` and `end` are safe JSON integers denoting whole UTC seconds, with `start < end`, interpreted only through qualified time/elapsed/boot continuity. Admit only when the entire qualified interval lies in `[start,end)`, intersected with every component's original, possibly shorter deadline. Q25 selects the actual source, conversion and continuity contract; no default TTL or "until replaced" is authorized ([original-time requirements][activation-time], [retained deadlines][activation-replay]). |
+| `intent_id` | Exact nonempty original owner-intent identifier retained by the operator's original installation/cutover operation. Bind it immutably to this body, its id and occurrence. It is not a native signer request ID, the envelope id or a new execution/result receipt. Q24 must settle its existing-operation mapping and finite encoding limits; this field supplies no new ID allocator ([cutover retention][activation-cutover], [original operation/effect retention][activation-replay]). |
+
+The six semantic requirements map as follows: scope/audience to `scope`;
+immutable artifacts to `artifacts`; complete qualified tuple to `qualified_tuple`;
+finite original validity to `validity`; revocation/currentness bindings to those
+same exact policy, qualification and cutover references plus independently
+protected root/history facts; original human intent to `intent_id`. There is no
+caller-supplied `current`, `approved`, `enabled`, revocation verdict or substitute
+root-state blob in this body. Authoritative withdrawal/currentness is an admission
+input under §12.4, not a Boolean that the signature makes true
+([policy/currentness ownership][activation-dispatch-current],
+[broker marker scope][activation-broker-publication]).
+
+The caller and executor worker are distinct roles. Neither role can be derived
+from one station UID. Even same-account equality must be selected explicitly in
+protected policy. Both `scope.policy` and `qualified_tuple` must retain both
+UID/generation references and that mapping through their existing typed closure;
+this section adds no guessed native policy member. B4 pins both roles. Broker
+v0 setup allowlists the exact executor worker UID, and its peer-scoped `status`
+positive control must come from that worker and return the expected policy
+generation and account. Caller-UID evidence cannot substitute; when distinct,
+the caller is among the foreign-UID empty/denied controls. A lease request is
+never a setup probe. Setup remains separately bounded and qualified, with
+admission closed and no active lease during policy replacement
+([roles][activation-two-roles], [setup/status][activation-worker-status],
+[B4/B5 retained mapping][activation-bootstrap]).
+
+**Q24 remains a signing gate.** The broker record currently names its own measured
+identity and artifacts; it does not yet publish the complete cross-service tuple
+or all accepted-review/intent bindings required here. Its applied-property
+observer and required live rows remain unavailable. The cutover record is a
+phased prose contract, not an already published root-signing/result envelope.
+The owning services must publish and jointly accept the complete typed reference
+closure and mappings in their existing records before a body can be instantiated.
+Do not create an auxiliary tuple/approval/cutover schema, use an opaque manifest,
+or fill missing installed evidence with source commit pins. No usable signing
+example, installed digest, key or pin set is supplied here
+([current qualification status][activation-broker-status],
+[observer limits][activation-broker-observers], [cutover][activation-cutover]).
+
+### 12.3 Ordered verification and consuming obligations
+
+The actual verifier of the root-signed record is the dispatcher, or the
+protected operator installation path when establishing protected state. Only
+that verifier applies the nine steps below to the signature, body, complete
+references and currentness. It closes NEW starts at the dispatcher-owned or
+protected start gate when permission expires or is withdrawn. Missing limits,
+protected inputs, closure evidence or qualified integration keeps activation
+unavailable; unknown closure proves no stopped execution or settled debt.
+Downstream services consume their own accepted facts, not this record. The
+user-manager authenticates the publisher of its receiver-owned gate state;
+Keymaker uses its protected caller association and operator-installed scope;
+broker v0 continues its own policy checks. None gains an owner-intent input.
+
+| Order | Required check; refuse before proceeding on failure |
+| --- | --- |
+| 1 | Enforce the selected finite byte/count/depth limits while reading; parse the envelope/body and every required nested type with the closed-member and CCJ-1 integer rules. Never repair an unknown field or incomplete schema. |
+| 2 | Select only the fixed activation domain/profile from protected consumer policy, reconstruct the exact preimage and verify its id. A caller cannot supply another prefix, frame, body digest or signing plan. |
+| 3 | Resolve the external owner root from protected pins and independently retained historical authorization for this owner/profile/occurrence. Received keys, claims or artifact digests choose no root. Known historical authorization does not bypass later withdrawal. |
+| 4 | Verify the exact preimage signature using that permitted root/profile, including strict Ed25519/key/encoding checks. Device, station, registry and foreign-domain signatures refuse. |
+| 5 | Match installation audience, intended receiver/consumer, operation scope, independently pinned caller and executor worker UID/generation references, their explicit protected mapping and original intent. No wildcard, adoption or delegation follows. |
+| 6 | Resolve every referenced artifact and its complete typed closure through its owner; independently reverify whole bytes/digests, all list entries/records/approvals/case artifacts, exact current observations, policy/plan provenance, accepted revisions and cutover phase. A marker, digest or broker record alone cannot establish the other owners' facts. |
+| 7 | Check the finite validity interval against qualified time/elapsed/boot continuity and all original shorter component deadlines. Unknown time or equality at expiry closes forward authority; no renewal through another receipt/window. |
+| 8 | Recheck authoritative root/key/policy/qualification/generation/configuration/version/custody/time/restore currentness and explicit owner withdrawal, using independently protected monotonic histories and exclusions. Missing or stale revocation/currentness evidence refuses. |
+| 9 | Under the owning durable consumption transaction, revalidate the exact admitted revisions and reserve/consume the original occurrence once before its forward effect. Retain the immutable intent/body binding, outcome/unknown state, tombstones, original debit and cleanup/stop obligations. Verification alone consumes nothing and issues no effect. |
+
+This order composes the existing closed-byte/root/authority boundaries, whole-list
+publication checks and retained currentness/replay requirements; the new mapping
+and implementation still need independent consumer acceptance
+([CCJ-1][activation-ccj], [protected root/history facts][activation-device],
+[whole-list checks][activation-broker-publication],
+[protected currentness][activation-dispatch-current],
+[original replay/effects][activation-replay]).
+
+Repeated checks by the dispatcher or protected installation verifier may not
+create repeated activation or launch effects for one occurrence. Same
+intent/occurrence and identical body recover only the original outcome; a
+changed body conflicts. Restart, byte-identical
+reinstall, restored clone, a new signature or a newly named occurrence cannot
+replenish the launch debit for the original worker/policy lineage. Keep retained
+consumption, pending effects and tombstones across restart/restore/clone and
+reconcile external surviving floors with enforceable old-instance fencing before
+forward reuse. Missing history is unknown, never unused. Q27 must assign the
+replay store owner and cross-consumer atomicity/recovery protocol; no atomic
+cross-service commit or accepting store is claimed. Current activation authority
+is needed for unperformed enablement work; existing broker lease activity follows
+§12.4. Original observation/reconciliation and reduce-only stop use their own
+retained authority ([dispatcher replay][activation-replay],
+[restore and instance fences][activation-restore],
+[proposed independent custody/restore][activation-custodian-restore],
+[lifetime exclusion remains unqualified][activation-custodian-exclusion]).
+
+These are obligations on the owning services, not implemented registry calls:
+
+| Consumer / call site obligation | Required retained boundary |
+| --- | --- |
+| Dispatcher, or protected operator installation path: actual activation-record verifier | Verify the root signature, closed body, complete owner-reverified references and currentness before installing accepted protected start state or permitting NEW starts. Bind the original intent to the exact policy, caller association and UID/generation, independently pinned worker UID/generation, explicit mapping, tuple and one-start ledger. Reconcile the original outcome; do not delegate verification to downstream own-fact consumers ([prepare/currentness][activation-dispatch-current], [replay][activation-replay]). |
+| User-manager and launcher: receiver-owned start-gate consumers, not activation-record verifiers | They never verify `activation/1`, signatures or owner intent and gain no input or member for them. Authenticate the publisher of accepted protected gate state, then enforce the existing generation/claim/controller interlock and selected start contract. Root receipt and verified privilege drop precede C; C before Rv or expiry retains the preparatory child and every resumer as original stop work. Qualify the residual interval and independent stop within the earliest original bound; C must precede Rv and expiry; otherwise refuse. The selected committed-start contract is unchanged; no strict-native-release alternative is selected ([protected publisher][activation-manager-publisher], [selected start][activation-manager-start]). |
+| Keymaker: no activation-record verifier | It signs only `dispatcher-request/1` under the protected caller association (an operator-installed B0–B5 scope). The signature authenticates exact request bytes and never authorizes a start. Owner activation gates NEW starts at the dispatcher; Keymaker gains no owner-intent input, field, method or code. Do not send this body to `sign_station_caller` or make purpose 6 sign it. B4 is dispatcher policy installation; B5 activates the operator's purpose-6 scope, not owner activation. Preserve own-fact association/currentness/custody checks and the accepted reduce-only owned-run cancel rules ([station profiles][activation-station], [B4/B5][activation-bootstrap], [cancel/currentness][activation-station-cancel]). |
+| Broker v0: own-fact policy and lease checks only | No activation-record verifier or owner-intent input, field, RPC or command is added. Kernel-peer, account/profile, policy-generation, qualification and material-delivery checks remain its own. It does not observe owner withdrawal or enforce this permission's expiry. Planned removal needs no unpublished interceptor, new-lease closure or immediate policy replacement; credential material continues under broker policy until worker stop, with separate lease/token debt ([lease lifetime][activation-broker-lifetime], [policy replacement][activation-broker-reload]). |
+
+Q28 must publish the dispatcher's or protected installation path's actual
+verification/intake and authenticated publication of accepted protected start
+state. The user-manager/launcher only consume that gate state through their
+existing interlock after authenticating its publisher. Keymaker consumes its own
+association and operator-installed signing scope; broker v0 consumes its own
+policy and lease facts. No blanket record delivery or verification by downstream
+services is authorized. Retain each owner's original installation/outcome and
+native qualification obligations; no new launcher member, broker install API,
+generic signing endpoint or parallel result schema is introduced. The accepted
+projection/intake, selected start boundary and qualification remain Q28 gates,
+not permission to execute an integration plan
+([dispatcher gates][activation-dispatch-gates],
+[protected publisher][activation-manager-publisher],
+[selected start][activation-manager-start]).
+
+### 12.4 Withdrawal, currentness, order and closed gates
+
+Planned expiry or withdrawal of the owner's enable-only permission closes NEW
+starts at the dispatcher-owned or protected start gate. Work already committed
+under the selected start contract stops by its earliest ORIGINAL qualified stop
+bound, including the bounded residual interval and every resumer. Credential
+material continues under the broker's own policy until worker stop; lease and
+token debts remain separately tracked. This case requires no unpublished broker
+interceptor, new-lease admission closure or immediate policy replacement. The
+owning start-gate publisher retains actual closure evidence; unknown completion
+is unconfirmed and does not prove worker stop or settled effects.
+The actual verifier and the services enforcing their own facts close affected
+scope on authoritative invalidation or unknown currentness of the signing root/key,
+protected policy or accepted qualification; changed configuration, binary/version,
+caller/worker/controller generation or association; invalid plan/catalog/routing/
+account/receiver/key/master epoch; and lost custody/time continuity, restore floor,
+replay history or instance exclusion. These remain the owning verifier and
+own-fact interlock/currentness obligations, not activation inputs for downstream
+services. Each owner checks its own facts at preparation and its selected effect
+or release boundary. A new generation of either role requires a new protected
+association, policy and verified executor-worker allowlist entry; equal
+UID/public bytes never adopt an old generation automatically. A UID-only broker entry proves no generation
+([new-generation setup][activation-manager-setup],
+[recreate/currentness][activation-recreate]). Q26 must publish
+the authoritative withdrawal/revocation delivery, detection bounds, continuity
+and acknowledgment rules; a signed intent cannot attest its own continuing
+validity ([currentness/invalidation][activation-dispatch-current],
+[receiver invalidation][activation-manager-start],
+[restore fences][activation-restore]).
+
+Where registry publication carries the external root state, preserve D42(a):
+that external root signs changed content, while registry freshness proves only
+the currency allowed by the format owner's accepted multi-snapshot profile.
+The root Signer application must check that its exact submission was journaled;
+intake acknowledgment alone is insufficient. Current single-snapshot freshness
+cannot waive external-root own-age checks or prove this activation remains
+unwithdrawn. Q17's format change/pin, publisher coverage and consumer rule remain
+gates; this section widens no existing registry wire/intake profile. If root
+currentness is delivered outside that path, Q26 must identify and qualify its
+independent authority/transport/restore protocol instead; none is guessed here
+([existing D42(a) boundaries][activation-currency],
+[root Signer inclusion obligation][activation-root-inclusion]).
+
+Expiry, refusal, withdrawal or changed tuple closes forward enablement while
+preserving every original unknown effect, consumed launch entitlement, claim,
+lease/token/custody/output disposition and stop/cleanup debt. Under unchanged
+broker policy, an existing lease retains its original `authorized_until`; renewal
+may replace material under the existing v0 checks but never extends that deadline.
+Successful policy-generation replacement is a separate action that invalidates
+old-generation leases and connections earlier; no lease-survival-across-reload
+guarantee is made ([lease methods/lifetime][activation-broker-lifetime],
+[retained renewal deadline][activation-broker-renewal],
+[policy-generation invalidation][activation-broker-reload]).
+
+Admission closure, worker stop, material delivery, `lease.release` or lease expiry,
+and vendor-token invalidation are separate facts. A failed `lease.release`,
+including an old-generation refusal, retains unresolved debt and is not an
+acknowledgement. Neither local closure nor a lease receipt proves immediate
+vendor-token revocation. Authorized original observation/reconciliation and
+reduce-only stop retain their own authority; no new occurrence, signature, reboot
+or retry clears debt ([old-generation refusal][activation-broker-release],
+[retained effects/debit][activation-replay]).
+
+Planned permission-window expiry preserves that earliest original stop bound;
+it is not a security trigger or security-revocation guarantee. Genuine tuple
+security revocation remains a separate closed Q26/Q28 gate. A first-run canary
+using this record carries an explicit limitation: on a real security event the
+operator manually stops the worker and replaces the broker policy. The
+**detection-to-policy-replacement-commit issuance window** is a named limitation,
+not a fence; material may still be issued between detection and the replacement
+commit. The record and canary claim no conformance to the platform's
+execution-isolation security-revocation requirement. No new-lease interceptor is
+selected as a substitute response. Publish and qualify authoritative detection,
+response bounds and complete stop/effect endpoints before claiming that property.
+This may only tighten existing deadlines; publication, acknowledgement or retry
+cannot restart an original stop or security-response obligation
+([receiver stop/deadline rules][activation-manager-start],
+[policy-replacement boundary][activation-broker-reload]).
+
+Order is: separately accepted artifacts and native qualified tuple; exact-content
+review and owner-root Signer authorization; dispatcher or protected installation
+verification and authenticated protected-state publication; downstream own-fact
+interlocks and each owner's retained installation/activation outcome;
+only then any canary. Qualification that itself needs live approval retains its
+separate explicit scope; this record supplies no live-test authorization. A
+coordinating party may transport the reviewed request and response but does not
+sign for the owner. Signature delivery is not execution acknowledgment, a cutover result
+or proof of canary success. Do not pre-fill future canary/load results into the
+phase being authorized; each later phase retains its own evidence. Lost or
+one-sided acknowledgments remain closed and reconcile the original operation
+([phased cutover][activation-cutover],
+[qualification approval/publication boundary][activation-broker-status],
+[dispatcher installation and replay][activation-dispatch-current]).
+
+WC1 now publishes an independent custodian protocol v1 proposal: it remains
+a proposal, with no accepted custody wire envelope or qualified provider. Its
+separate keys/pins, original-evidence confirmation, current-control and lifetime
+exclusion obligations apply only through accepted consumer mappings; it supplies
+no implicit registry enrollment, activation root or replay-store owner
+([proposal scope and wire boundary][activation-custodian-scope],
+[restore][activation-custodian-restore],
+[exclusion][activation-custodian-exclusion]).
+
+All signing, installation, serving, native timing/custody, consumer intake and
+canary gates remain closed. Q22–Q28 in §10 are publication/acceptance dependencies,
+not discretionary warnings. No owner decision accepting this new profile,
+actual key, validity interval or deployment is asserted by this proposal.
+
+### 12.5 Paired documentary controls — all PENDING
+
+These are named design counterexamples, not executed tests, implementation
+coverage or qualification. Every refusal/unknown case keeps the original intent,
+debit, effects and stop obligations; it grants no new enablement authority.
+Existing broker lease activity follows the separate §12.4 rules.
+
+| Named case | Nearby valid case, conditional on every gate | Concrete refusal / retained boundary |
+| --- | --- | --- |
+| `ActivationVerifierOwnership` | Only the dispatcher or protected operator installation verifies the root record; downstream services use their own facts. User-manager authenticates the protected gate publisher, Keymaker signs its protected request scope, and broker v0 uses its own policy. | A blanket obligation for every consumer to receive or verify the record is invalid even when accompanied by no-new-method wording. Passing owner signatures/intent to user-manager/launcher or Keymaker is forbidden ([publisher][activation-manager-publisher], [station scope][activation-bootstrap]). |
+| `ActivationRootRoleSeparation` | A dedicated external owner-activation key has explicit protected role pins and independently verified historical authorization. | Reuse the same key in the operator-root or any other excluded role, or alias such a key as the activation key: refuse even if its cryptographic signature is valid. Domain separation cannot replace key/role separation ([roles][activation-roles]). |
+| `OwnerScopeCurrent` | Pinned external owner root signs the exact activation domain/body for the intended installation/receiver and current referenced tuple/policies, with finite qualified validity and fresh authoritative withdrawal checks. | A cryptographically valid device/purpose-6/registry signature, wrong receiver, revoked root, unavailable purpose/schema or unknown revocation source refuses before activation. Digest/marker or signature success alone cannot authorize. |
+| `CallerWorkerMapping` | The referenced protected policy and tuple pin the caller association/UID/generation and independently the executor worker UID/generation, with an explicit mapping; exact worker-UID status and the foreign-UID control satisfy qualified setup. | Substitute caller UID/status evidence for a distinct worker, infer both roles from one UID, omit either generation or adopt a recreated equal UID: refuse. Same-account use needs an explicit selected mapping and independent role checks ([two roles][activation-two-roles], [status][activation-worker-status], [B4][activation-bootstrap]). |
+| `ChangedTupleAndClone` | Independently reverified unchanged native identity/generations, complete record/list/marker closure and surviving external currentness/replay/exclusion evidence recover only the original outcome/debit. | Changed binary/policy/configuration/generation, unknown boot continuity, retired/recreated equal UID, restored clone or restored byte-identical success refuses forward reuse; require owning requalification/reapproval/reconciliation, never a new occurrence or replenished start. |
+| `OwnerPermissionLeaseSeparation` | Planned permission expiry/withdrawal closes NEW starts at the dispatcher-owned or protected start gate. Already-committed work retains its earliest original qualified stop bound; credential material continues under broker policy until worker stop, with separate lease/token debts. An unchanged-policy lease retains its original `authorized_until`; renewal never extends it. | Requiring an unpublished new-lease interceptor, NEW-lease admission closure or immediate policy replacement for planned expiry/removal is a contract violation. Equating permission expiry with lease/token expiry or settled stop debt also refuses this distinction ([lifetime][activation-broker-lifetime], [renewal][activation-broker-renewal]). |
+| `SecurityRevocationWindow` | On a genuine tuple security event, the operator manually stops the worker and replaces broker policy; explicitly retain the detection-to-policy-replacement-commit issuance window and first-run limitation. The canary claims no execution-isolation security-revocation conformance. | Claiming a fence, immediate revocation or conformance before qualified detection/stop/effect endpoints, or substituting a new-lease closure requirement for the stated manual response, fails the limitation. Do not reintroduce that closure requirement through planned expiry ([policy replacement][activation-broker-reload]). |
+| `PolicyGenerationLeaseSeparation` | Successful policy-generation replacement separately invalidates old-generation leases/connections before their original deadline; an authenticated successful release has its own receipt. | Do not infer lease survival across reload, treat an old-generation `lease.release` refusal as an acknowledgement, discard its unresolved debt, or infer vendor-token revocation from closure/expiry/release. Pair the unchanged-generation lease above with this earlier invalidation case ([reload][activation-broker-reload], [release guard][activation-broker-release]). |
+| `ActivationOutcome` | Each owner durably retains its own authenticated installation/activation result bound to the same original root intent, with all current gates satisfied before a canary. | Lost reply, partial/one-sided opening, `enabled` flag, broker marker or delivered signature presented as full activation stays unknown/closed; reconcile the original outcome without duplicate effects or invented result receipts. |
+
+Source boundaries for these pairs are the
+[whole qualification publication check][activation-broker-publication],
+[dispatcher scope/currentness/replay][activation-dispatch-current],
+[original effect retention][activation-replay] and
+[receiver start/stop gate][activation-manager-start]. All remain **PENDING**.
+
+[activation-roles]: https://github.com/relux-works/swarma-owner-registry/blob/79d92d6521fd984e46b35238f848b7ff954a3ef0/design/owner-registry.md#L62-L110
+[activation-ccj]: https://github.com/relux-works/swarma-registrar/blob/2219f70358fb7b5c7d66f229c80a8ba4a1fe0230/spec/registrar.md#L56-L109
+[activation-purpose]: https://github.com/relux-works/swarma-keymaker/blob/14532907e28cbfda6d049955e5e2b7de0bf42554/spec/keymaker.md#L691-L707
+[activation-station]: https://github.com/relux-works/swarma-keymaker/blob/14532907e28cbfda6d049955e5e2b7de0bf42554/spec/keymaker-station-caller.md#L8-L105
+[activation-device]: https://github.com/relux-works/swarma-keymaker/blob/14532907e28cbfda6d049955e5e2b7de0bf42554/spec/keymaker-operator-record.md#L18-L108
+[activation-dispatch-scope]: https://github.com/relux-works/swarma-dispatcher/blob/5558b30ca214745390d82fa3ea92aa85feb6dad5/spec/m0-launch.md#L11-L41
+[activation-dispatch-forms]: https://github.com/relux-works/swarma-dispatcher/blob/5558b30ca214745390d82fa3ea92aa85feb6dad5/spec/m0-launch.md#L57-L89
+[activation-dispatch-bytes]: https://github.com/relux-works/swarma-dispatcher/blob/5558b30ca214745390d82fa3ea92aa85feb6dad5/spec/m0-launch.md#L91-L115
+[activation-dispatch-current]: https://github.com/relux-works/swarma-dispatcher/blob/5558b30ca214745390d82fa3ea92aa85feb6dad5/spec/m0-launch.md#L155-L179
+[activation-dispatch-gates]: https://github.com/relux-works/swarma-dispatcher/blob/5558b30ca214745390d82fa3ea92aa85feb6dad5/spec/m0-launch.md#L363-L374
+[activation-replay]: https://github.com/relux-works/swarma-dispatcher/blob/5558b30ca214745390d82fa3ea92aa85feb6dad5/spec/m0-launch.md#L225-L258
+[activation-manager-start]: https://github.com/relux-works/swarma-user-manager/blob/b6a288d42e89040f4668e37fb71508fb8cd9f844/docs/design/m0-start-invalidation.md#L85-L115
+[activation-broker-record]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/internal/qualification/record.go#L19-L73
+[activation-broker-policy]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/internal/policy/policy.go#L16-L42
+[activation-broker-publication]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/internal/qualification/storage_linux.go#L482-L513
+[activation-broker-status]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/docs/qualification.md#L1-L55
+[activation-broker-observers]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/docs/qualification.md#L75-L90
+[activation-broker-grant]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/spec/broker.md#L324-L329
+[activation-cutover]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/spec/v0-codex-refresher.md#L184-L241
+[activation-time]: https://github.com/relux-works/swarma-owner-registry/blob/79d92d6521fd984e46b35238f848b7ff954a3ef0/design/owner-registry.md#L1251-L1261
+[activation-restore]: https://github.com/relux-works/swarma-owner-registry/blob/79d92d6521fd984e46b35238f848b7ff954a3ef0/design/owner-registry.md#L1080-L1122
+[activation-currency]: https://github.com/relux-works/swarma-owner-registry/blob/79d92d6521fd984e46b35238f848b7ff954a3ef0/design/owner-registry.md#L611-L633
+[activation-root-inclusion]: https://github.com/relux-works/swarma-owner-registry/blob/79d92d6521fd984e46b35238f848b7ff954a3ef0/design/owner-registry.md#L1770
+
+[activation-broker-marker]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/internal/qualification/storage_linux.go#L323-L327
+[activation-two-roles]: https://github.com/relux-works/swarma-keymaker/blob/14532907e28cbfda6d049955e5e2b7de0bf42554/spec/keymaker-station-caller.md#L223-L250
+[activation-worker-status]: https://github.com/relux-works/swarma-keymaker/blob/14532907e28cbfda6d049955e5e2b7de0bf42554/spec/keymaker-station-caller.md#L275-L310
+[activation-bootstrap]: https://github.com/relux-works/swarma-keymaker/blob/14532907e28cbfda6d049955e5e2b7de0bf42554/spec/keymaker-station-caller.md#L312-L363
+[activation-recreate]: https://github.com/relux-works/swarma-keymaker/blob/14532907e28cbfda6d049955e5e2b7de0bf42554/spec/keymaker-station-caller.md#L547-L562
+[activation-manager-setup]: https://github.com/relux-works/swarma-user-manager/blob/b6a288d42e89040f4668e37fb71508fb8cd9f844/docs/design/first-run-launch-stop.md#L30-L40
+[activation-custodian-scope]: https://github.com/relux-works/swarma-witness/blob/e90b8a2ec1f560167cae93b6078c7ccd0d1fce21/spec/custodian-v1.md#L1-L91
+[activation-custodian-restore]: https://github.com/relux-works/swarma-witness/blob/e90b8a2ec1f560167cae93b6078c7ccd0d1fce21/spec/custodian-v1.md#L190-L239
+[activation-custodian-exclusion]: https://github.com/relux-works/swarma-witness/blob/e90b8a2ec1f560167cae93b6078c7ccd0d1fce21/spec/custodian-v1.md#L249-L277
+
+[activation-broker-lifetime]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/spec/v0-codex-refresher.md#L617-L630
+[activation-broker-renewal]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/internal/lease/manager.go#L648-L679
+[activation-broker-reload]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/spec/v0-codex-refresher.md#L96-L104
+[activation-broker-release]: https://github.com/relux-works/swarma-credential-broker/blob/8b45a165fa528395da5f8b098ac722427c90dce5/internal/lease/manager.go#L511-L525
+
+[activation-manager-publisher]: https://github.com/relux-works/swarma-user-manager/blob/b6a288d42e89040f4668e37fb71508fb8cd9f844/docs/design/m0-start-invalidation.md#L40-L60
+[activation-station-cancel]: https://github.com/relux-works/swarma-keymaker/blob/14532907e28cbfda6d049955e5e2b7de0bf42554/spec/keymaker-station-caller.md#L531-L562
