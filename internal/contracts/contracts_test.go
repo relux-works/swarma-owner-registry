@@ -20,7 +20,7 @@ type modulePolicy struct {
 }
 
 func allowed(p modulePolicy) bool {
-	if p.Module.Path != "github.com/relux-works/swarma-owner-registry" || p.Go != "1.26.0" || len(p.Require) != 2 || len(p.Replace)+len(p.Exclude)+len(p.Tool) != 0 {
+	if p.Module.Path != "github.com/relux-works/swarma-owner-registry" || p.Go != "1.26.8" || len(p.Require) != 2 || len(p.Replace)+len(p.Exclude)+len(p.Tool) != 0 {
 		return false
 	}
 	want := map[string]string{"github.com/relux-works/swarma-envelope": "v0.0.0-20261026200550-5636986d0de5", "github.com/relux-works/swarma-registrar": "v0.0.0-20261025040811-264660e5dabb"}
