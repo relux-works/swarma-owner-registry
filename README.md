@@ -738,7 +738,7 @@ witnessed checkpoint and latest selection; an intake acknowledgement is insuffic
 
 ## Tools
 
-Use Go 1.26.8 (module language version 1.26.8) and `gofmt`. Dependencies are
+Use Go 1.26.10 (module language version 1.26.10) and `gofmt`. Dependencies are
 limited to the public `swarma-envelope` at `v0.0.0-20261026200550-5636986d0de5`
 and registrar at `v0.0.0-20261025040811-264660e5dabb`. Module selection uses this
 registrar pin over the shared envelope module's older requirement. Its CCJ packages are byte-identical
@@ -799,7 +799,7 @@ reports in a disposable workspace scratch directory.
 
 ## Hosted checks
 
-The Linux workflow runs on `ubuntu-26.04` with Go `1.26.8`, local toolchain
+The Linux workflow runs on `ubuntu-26.04` with Go `1.26.10`, local toolchain
 selection and read-only repository permissions. Both actions are pinned to exact
 commits, checkout credentials are not retained, and full history is fetched for
 the pull request's added-line check. Pull requests and pushes to `main` run one
