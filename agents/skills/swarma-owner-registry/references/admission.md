@@ -1,0 +1,38 @@
+# Admission and currency
+
+## Protected configuration
+
+Read [pins.go](../../../../internal/pins/pins.go) and [contracts.go](../../../../internal/contracts/contracts.go). `pins.Parse(raw)` consumes caller-protected bounded CCJ-1 bytes; it opens no configuration file and does not obtain trust from requests or repository metadata. The configuration limit is 16 KiB and eight container levels. Duplicate members, unknown fields and invalid shapes refuse with a typed `pins.Error`; refusal returns nil configuration.
+
+Required top-level members are `revision`, `owner`, `object_format`, `roles`, `record_types`, `key_classes` and `service_profile`. Optional members are `activation` and `registry_currency_version`. `contracts.Revision` is `5636986d0de5d00c8c744ca2105648d60a48b814`; it is the compiled dependency contract pin, distinct from this repository's frozen revision. [go.mod](../../../../go.mod) pins the envelope and registrar modules and declares Go 1.26.10.
+
+The owner is a nonempty UTF-8 string of at most 255 bytes. Parsing it supplies no external owner-identity check. `object_format` must explicitly be `sha1` or `sha256`; it has no default and is not inferred from a revision. Each of the seven roles has exactly `key`, `purpose` and `scope`; all role keys must differ. Purpose-5, enrollment-publisher and grant-service subjects require Ed25519 identifiers. These checks validate configured bindings, not the authority of whoever supplied the configuration. Key and pin decisions remain **OWNER-SITTING ONLY**.
+
+Currency selection is protected and closed: omission is legacy version 0; explicit 1 retains the /1 record set; explicit 2 selects `checkpoint/2`. Other versions refuse `profile_unsupported`; there is no negotiation or downgrade. The compiled sets and exact grant-service profile cannot be extended by configuration.
+
+`Config.Pin` returns a role pin by value. `CheckProfile` checks type/class membership only, not signature validity, allowed combinations or activation dependencies. `CheckPurpose5` binds the exact configured root to integer purpose 5. `IsOpen` and `Require` query gates; omitted gates stay closed, as do nil/zero configurations. A protected true is an owner declaration, not measured qualification. `VerifierContext` copies static pins and currency version; signed, current, time and witness facts remain unavailable. No constructor result silently fills them.
+
+## Pure record intake
+
+Read [intake.go](../../../../internal/intake/intake.go). `intake.Accept(kind, raw, config, facts)` accepts only `attestation/1`, `grant/1` and `revocation/1`. Selected-type byte limits run before parsing: 8,192 for attestations and snapshots, 65,536 for grants. Unsupported routing refuses `record_type_unsupported`; a body with the wrong selected type refuses `envelope_type_mismatch`.
+
+`Facts` supplies current evidence; its fields cannot override static pins. Ordinary values use CCJ shapes, including `int64` numbers. Nil collections mean unavailable; nonnil empty collections mean available and empty. `Facts.Parents` is the leaf-first grant ancestry after the submitted leaf. `Facts.Request` must be the protected concrete key/action/target request. The verifier checks the whole chain; service identity alone supplies no parent or action authority. Only the configured grant-service subject may occupy that service role.
+
+`Snapshot.Available`, `MaxAge` and `RollbackSafe` are protected caller premises, not conclusions inferred from a snapshot signature. New snapshot submissions check the submitted exact bytes under their issuer's metadata; they do not prove cumulative continuity. The available exact-byte journal is supplied by `Facts.Retained` and `RetainedAvailable`. After profile/signature checks, different bytes at an existing ID refuse `envelope_conflict`; unavailable journal evidence refuses `id_journal_unavailable`.
+
+Successful `Accepted` contains `ID`, `Type`, `IssuerRoot` and an owned copy of `Bytes`. For grants the issuer root is the protected grant root, not the service leaf issuer. Refusals return nil; the function changes neither caller input nor external state. It performs no resource opens, journaling or effects. Caller authentication, activation dependencies and later serialized revalidation remain outside this pure function.
+
+## Retained receipts and effects
+
+Read [composition.go](../../../../internal/composition/composition.go) and [registry.go](../../../../internal/intake/registry.go).
+
+- `composition.VerifyFreshness(Proof)` performs full normal F admission. `VerifyFreshnessReanchor(Proof)` explicitly selects recovery with exactly one tip; normal verification never retries recovery. Only full success initializes the process-local `Admission`.
+- `Admission.Plan()`, `Anchor()` and `Projection()` expose detached candidate/recovery information. `Audit()` reports origin, not current authority. Never copy, serialize or restore a receipt; restart requires new full admission.
+- `composition.New(Use)` binds the original admitted receipt only after an exact `PersistenceAcknowledgement`. That equality check cannot prove actual persistence. `NewRequired` selects required-receipt policy; optional absence in `New` deliberately selects legacy own-age verification. A raw receipt cannot bypass the acknowledgement.
+- Preserve the same whole `SignedSnapshots` evidence identity and, for /2, `SnapshotJournal`. Byte-equivalent reconstruction does not preserve the premise. Current authenticated witness/read facts and qualified interval evidence remain caller inputs. Receipt checks have no silent legacy retry.
+- `intake.NewRegistry` retains snapshots and starts without receipt authority. `NewCurrencyRegistry` additionally requires protected version 2 and retains the complete-prefix journal evidence. `ReplaceSnapshots` changes the whole premise; `ReplaceSnapshotJournal` always clears held admission, including replacement back to earlier evidence. Remint through full F after premise changes.
+- `RegistryCurrent.Facts.Snapshots` must be nil; use the explicit replacement method. Its clock projection overrides point-time facts. Legacy registry routing admits agent attestations and new snapshots; /2 adds grants, operator-device and service attestations with required exact root coverage. Unlike pure grant intake, `Registry.Accept` caps every submitted kind at 8,192 bytes.
+- `composition.CheckSubmittedSnapshot` is a separate own-age path for exact new snapshot bytes. Neither a receipt nor old cached bytes can authorize a replacement submission.
+- `Registry.Apply(candidate, boundary, effect)` repeats full admission of the candidate's exact bytes. `RegistryBoundary` supplies fresh facts and holds the caller's final external exclusion through `RegistryEffect`. The adapter holds its local premise lock, enforces one-shot callback lifetime and propagates observed errors without retry. The effect must not re-enter that registry. A dispatched effect cannot be undone by a later boundary failure.
+
+Required missing receipt evidence refuses `freshness_receipt_unavailable`; acknowledgement/premise mismatch refuses `freshness_receipt_binding_mismatch`. The [README's receipt and /2 sections](../../../../README.md#pure-freshness-receipt-composition) describe additional pinned-verifier refusals and exact coverage. A registry receipt does not confer another root's authority: only exact /2 coverage can waive a reached root's own-age check. Signatures, issuer authority, effective revocations and fixed receipt expiry remain enforced. Caller acknowledgements and historical membership are not proof of current deployment authority.
