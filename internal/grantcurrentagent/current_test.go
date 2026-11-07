@@ -71,9 +71,9 @@ func TestSyntheticControlAndCausalRefusals(t *testing.T) {
 		{"same_head_binding_fork", func(s *readState) { s.current.binding.Generation = "generation-b" }},
 		{"source_fork_above_floor", func(s *readState) { s.current.binding.Generation = "generation-b"; s.origin.current = s.current }},
 		{"restored_active_after_retirement", func(s *readState) { s.floor.binding.Active = false }},
-		{"inactive", func(s *readState) { s.current.binding.Active = false; s.floor = s.current }},
+		{"inactive_binding_with_stale_origin", func(s *readState) { s.current.binding.Active = false; s.floor = s.current }},
 		{"missing_original_budget", func(s *readState) { s.deadline = time.Time{} }},
-		{"expired_original_budget", func(s *readState) { s.deadline = time.Now().Add(-time.Second) }},
+		{"expired_budget_with_origin_mismatch", func(s *readState) { s.deadline = time.Now().Add(-time.Second) }},
 		{"budget_extension_without_new_origin", func(s *readState) { s.deadline = s.deadline.Add(time.Hour) }},
 		{"oversized_head", func(s *readState) { s.current.head = strings.Repeat("x", 256) }},
 		{"oversized_reader", func(s *readState) { s.disclosure.principal = strings.Repeat("x", 256) }},
@@ -95,6 +95,64 @@ func TestSyntheticControlAndCausalRefusals(t *testing.T) {
 			*r.state.origin, *r.state.disclosure = origin, disclosure
 			if got, err := r.CurrentAgent(key); err != nil || got != original {
 				t.Fatal("synthetic repaired control failed")
+			}
+		})
+	}
+}
+
+func TestExpiredOriginalBudgetCausalRefusal(t *testing.T) {
+	// Each fixture admits one original budget in both places. The expired
+	// neighbor differs only in that budget; there is no handle/deadline mismatch
+	// and no clock substitution or claim of qualified time.
+	for _, expired := range []bool{false, true} {
+		name, remaining := "valid_budget", time.Hour
+		if expired {
+			name, remaining = "expired_budget", -time.Hour
+		}
+		t.Run(name, func(t *testing.T) {
+			r, key := syntheticReader()
+			s := r.state
+			originalBudget := time.Now().Add(remaining)
+			s.deadline, s.origin.deadline = originalBudget, originalBudget
+			before, origin, disclosure := *s, *s.origin, *s.disclosure
+			if expired {
+				denied(t, r, key)
+			} else if got, err := r.CurrentAgent(key); err != nil || got != s.current.binding {
+				t.Fatal("valid original budget control failed")
+			}
+			if r.state != s || *s != before || *s.origin != origin || *s.disclosure != disclosure {
+				t.Fatal("read changed original budget or admitted premises")
+			}
+		})
+	}
+}
+
+func TestInactiveBindingCausalRefusal(t *testing.T) {
+	// Both immutable origin positions and both current/floor positions agree.
+	// Only Active differs between these synthetic neighboring fixtures; the
+	// installed mapping, disclosure and unexpired original budget remain valid.
+	// This does not qualify authoritative retirement or history handling.
+	originalBudget := time.Now().Add(time.Hour)
+	for _, active := range []bool{true, false} {
+		name := "inactive_binding"
+		if active {
+			name = "active_binding"
+		}
+		t.Run(name, func(t *testing.T) {
+			r, key := syntheticReader()
+			s := r.state
+			s.deadline, s.origin.deadline = originalBudget, originalBudget
+			s.current.binding.Active = active
+			s.floor = s.current
+			s.origin.current, s.origin.floor = s.current, s.floor
+			before, origin, disclosure := *s, *s.origin, *s.disclosure
+			if !active {
+				denied(t, r, key)
+			} else if got, err := r.CurrentAgent(key); err != nil || got != s.current.binding {
+				t.Fatal("active binding control failed")
+			}
+			if r.state != s || *s != before || *s.origin != origin || *s.disclosure != disclosure {
+				t.Fatal("read changed binding or admitted premises")
 			}
 		})
 	}
